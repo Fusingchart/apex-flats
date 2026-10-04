@@ -8,7 +8,19 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "gt",
+    "price": 42000,
+    "level": 4,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.018,
+      0.16,
+      0.28
+    ],
+    "kind": "Grand tourer",
+    "description": "4.55 m grand tourer \u00b7 2 doors \u00b7 5-spoke alloys"
   },
   {
     "id": "sedan",
@@ -19,7 +31,19 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "sedan",
+    "price": 0,
+    "level": 1,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.48,
+      0.53,
+      0.59
+    ],
+    "kind": "Sedan",
+    "description": "4.78 m sedan \u00b7 4 doors \u00b7 10-spoke alloys"
   },
   {
     "id": "hatchback",
@@ -30,7 +54,19 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "hatchback",
+    "price": 11500,
+    "level": 2,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.62,
+      0.025,
+      0.04
+    ],
+    "kind": "Hatchback",
+    "description": "4.22 m hatchback \u00b7 4 doors \u00b7 5-spoke alloys"
   },
   {
     "id": "suv",
@@ -41,7 +77,19 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "suv",
+    "price": 20000,
+    "level": 2,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.19,
+      0.27,
+      0.2
+    ],
+    "kind": "Utility",
+    "description": "4.82 m utility \u00b7 4 doors \u00b7 6-spoke alloys"
   },
   {
     "id": "coupe",
@@ -52,7 +100,19 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "coupe",
+    "price": 30000,
+    "level": 3,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.55,
+      0.16,
+      0.025
+    ],
+    "kind": "Muscle coupe",
+    "description": "4.67 m muscle coupe \u00b7 2 doors \u00b7 5-spoke alloys"
   },
   {
     "id": "supercar",
@@ -63,6 +123,432 @@
     "forward": "+z",
     "authored": true,
     "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
-    "source": "art/vehicles/apex-vehicles.blend"
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "supercar",
+    "price": 92000,
+    "level": 5,
+    "power": 1,
+    "massScale": 1,
+    "paint": [
+      0.9,
+      0.22,
+      0.025
+    ],
+    "kind": "Supercar",
+    "description": "4.62 m supercar \u00b7 2 doors \u00b7 10-spoke alloys"
+  },
+  {
+    "id": "metro",
+    "name": "Metro",
+    "file": "custom/metro.glb",
+    "length": 3.65,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "hatchback",
+    "price": 0,
+    "level": 1,
+    "power": 0.55,
+    "massScale": 0.82,
+    "paint": [
+      0.17,
+      0.4,
+      0.43
+    ],
+    "kind": "Hatchback",
+    "description": "3.65 m hatchback \u00b7 2 doors \u00b7 4-spoke alloys"
+  },
+  {
+    "id": "sprint",
+    "name": "Sprint",
+    "file": "custom/sprint.glb",
+    "length": 3.91,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "hatchback",
+    "price": 6500,
+    "level": 1,
+    "power": 0.83,
+    "massScale": 0.88,
+    "paint": [
+      0.69,
+      0.39,
+      0.015
+    ],
+    "kind": "Hatchback",
+    "description": "3.91 m hatchback \u00b7 2 doors \u00b7 6-spoke alloys"
+  },
+  {
+    "id": "club",
+    "name": "Club Sport",
+    "file": "custom/club.glb",
+    "length": 4.08,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "hatchback",
+    "price": 15500,
+    "level": 2,
+    "power": 1.18,
+    "massScale": 0.93,
+    "paint": [
+      0.08,
+      0.38,
+      0.13
+    ],
+    "kind": "Hatchback",
+    "description": "4.08 m hatchback \u00b7 4 doors \u00b7 8-spoke alloys"
+  },
+  {
+    "id": "rally",
+    "name": "Rally Cross",
+    "file": "custom/rally.glb",
+    "length": 4.31,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "hatchback",
+    "price": 28000,
+    "level": 3,
+    "power": 1.32,
+    "massScale": 1.04,
+    "paint": [
+      0.32,
+      0.025,
+      0.4
+    ],
+    "kind": "Hatchback",
+    "description": "4.31 m hatchback \u00b7 4 doors \u00b7 6-spoke alloys"
+  },
+  {
+    "id": "executive",
+    "name": "Executive",
+    "file": "custom/executive.glb",
+    "length": 5.12,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "sedan",
+    "price": 18000,
+    "level": 2,
+    "power": 1.38,
+    "massScale": 1.19,
+    "paint": [
+      0.045,
+      0.065,
+      0.1
+    ],
+    "kind": "Sedan",
+    "description": "5.12 m sedan \u00b7 4 doors \u00b7 12-spoke alloys"
+  },
+  {
+    "id": "sportline",
+    "name": "Sportline",
+    "file": "custom/sportline.glb",
+    "length": 4.68,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "sedan",
+    "price": 23000,
+    "level": 3,
+    "power": 1.7,
+    "massScale": 1.04,
+    "paint": [
+      0.07,
+      0.16,
+      0.42
+    ],
+    "kind": "Sedan",
+    "description": "4.68 m sedan \u00b7 4 doors \u00b7 7-spoke alloys"
+  },
+  {
+    "id": "estate",
+    "name": "Trail Estate",
+    "file": "custom/estate.glb",
+    "length": 4.96,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "sedan",
+    "price": 12000,
+    "level": 2,
+    "power": 1.15,
+    "massScale": 1.1,
+    "paint": [
+      0.26,
+      0.11,
+      0.05
+    ],
+    "kind": "Sedan",
+    "description": "4.96 m sedan \u00b7 4 doors \u00b7 8-spoke alloys"
+  },
+  {
+    "id": "interceptor",
+    "name": "Interceptor",
+    "file": "custom/interceptor.glb",
+    "length": 5.03,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "sedan",
+    "price": 38000,
+    "level": 4,
+    "power": 2.1,
+    "massScale": 1.16,
+    "paint": [
+      0.32,
+      0.32,
+      0.34
+    ],
+    "kind": "Sedan",
+    "description": "5.03 m sedan \u00b7 4 doors \u00b7 5-spoke alloys"
+  },
+  {
+    "id": "cross",
+    "name": "Cross City",
+    "file": "custom/cross.glb",
+    "length": 4.29,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "suv",
+    "price": 14000,
+    "level": 2,
+    "power": 0.7,
+    "massScale": 0.83,
+    "paint": [
+      0.5,
+      0.28,
+      0.14
+    ],
+    "kind": "Utility",
+    "description": "4.29 m utility \u00b7 4 doors \u00b7 8-spoke alloys"
+  },
+  {
+    "id": "rover",
+    "name": "Rover XL",
+    "file": "custom/rover.glb",
+    "length": 5.24,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "suv",
+    "price": 26000,
+    "level": 3,
+    "power": 1.03,
+    "massScale": 1.22,
+    "paint": [
+      0.1,
+      0.12,
+      0.08
+    ],
+    "kind": "Utility",
+    "description": "5.24 m utility \u00b7 4 doors \u00b7 5-spoke alloys"
+  },
+  {
+    "id": "alpine",
+    "name": "Alpine Sport",
+    "file": "custom/alpine.glb",
+    "length": 4.67,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "suv",
+    "price": 46000,
+    "level": 4,
+    "power": 1.45,
+    "massScale": 0.95,
+    "paint": [
+      0.35,
+      0.035,
+      0.035
+    ],
+    "kind": "Utility",
+    "description": "4.67 m utility \u00b7 4 doors \u00b7 10-spoke alloys"
+  },
+  {
+    "id": "trail",
+    "name": "Trail Scout",
+    "file": "custom/trail.glb",
+    "length": 4.4,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "suv",
+    "price": 32000,
+    "level": 3,
+    "power": 0.88,
+    "massScale": 0.9,
+    "paint": [
+      0.42,
+      0.33,
+      0.17
+    ],
+    "kind": "Utility",
+    "description": "4.40 m utility \u00b7 4 doors \u00b7 6-spoke alloys"
+  },
+  {
+    "id": "heritage",
+    "name": "Heritage",
+    "file": "custom/heritage.glb",
+    "length": 4.35,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "coupe",
+    "price": 9500,
+    "level": 1,
+    "power": 0.64,
+    "massScale": 0.87,
+    "paint": [
+      0.44,
+      0.045,
+      0.1
+    ],
+    "kind": "Muscle coupe",
+    "description": "4.35 m muscle coupe \u00b7 2 doors \u00b7 4-spoke alloys"
+  },
+  {
+    "id": "barracuda",
+    "name": "Barracuda",
+    "file": "custom/barracuda.glb",
+    "length": 5.02,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "coupe",
+    "price": 35000,
+    "level": 3,
+    "power": 1.2,
+    "massScale": 1.13,
+    "paint": [
+      0.075,
+      0.09,
+      0.11
+    ],
+    "kind": "Muscle coupe",
+    "description": "5.02 m muscle coupe \u00b7 2 doors \u00b7 6-spoke alloys"
+  },
+  {
+    "id": "falcon",
+    "name": "Falcon RS",
+    "file": "custom/falcon.glb",
+    "length": 4.37,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "gt",
+    "price": 55000,
+    "level": 4,
+    "power": 1.25,
+    "massScale": 0.91,
+    "paint": [
+      0.55,
+      0.58,
+      0.62
+    ],
+    "kind": "Grand tourer",
+    "description": "4.37 m grand tourer \u00b7 2 doors \u00b7 7-spoke alloys"
+  },
+  {
+    "id": "endurance",
+    "name": "Endurance GT",
+    "file": "custom/endurance.glb",
+    "length": 4.94,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "gt",
+    "price": 68000,
+    "level": 5,
+    "power": 1.48,
+    "massScale": 1.22,
+    "paint": [
+      0.2,
+      0.025,
+      0.035
+    ],
+    "kind": "Grand tourer",
+    "description": "4.94 m grand tourer \u00b7 2 doors \u00b7 12-spoke alloys"
+  },
+  {
+    "id": "spectre",
+    "name": "Spectre",
+    "file": "custom/spectre.glb",
+    "length": 4.83,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "supercar",
+    "price": 125000,
+    "level": 6,
+    "power": 1.22,
+    "massScale": 0.96,
+    "paint": [
+      0.045,
+      0.12,
+      0.065
+    ],
+    "kind": "Supercar",
+    "description": "4.83 m supercar \u00b7 2 doors \u00b7 7-spoke alloys"
+  },
+  {
+    "id": "zenith",
+    "name": "Zenith",
+    "file": "custom/zenith.glb",
+    "length": 4.48,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend",
+    "base": "supercar",
+    "price": 180000,
+    "level": 7,
+    "power": 1.47,
+    "massScale": 0.9,
+    "paint": [
+      0.6,
+      0.58,
+      0.51
+    ],
+    "kind": "Supercar",
+    "description": "4.48 m supercar \u00b7 2 doors \u00b7 9-spoke alloys"
   }
 ]

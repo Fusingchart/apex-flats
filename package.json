@@ -1,0 +1,11 @@
+{
+  "name": "apex-flats",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "test:browser": "node tests/browser.smoke.cjs && node tests/browser.rewards.cjs && node tests/browser.models.cjs",
+    "render:cars": "node tools/render_car_previews.cjs"
+  },
+  "devDependencies": { "playwright": "1.63.0" }
+}

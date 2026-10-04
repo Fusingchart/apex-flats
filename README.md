@@ -1,6 +1,6 @@
 # Apex Flats
 
-A 3D driving game in the browser, built with Three.js. You drive a city on a hazy afternoon: a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can pick from six cars.
+A 3D driving game in the browser, built with Three.js. You drive a city on a hazy afternoon: a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can earn and collect 24 original cars.
 
 ## Run it
 
@@ -23,26 +23,55 @@ Three.js and the fonts load from a CDN, so the first load needs an internet conn
 | Q / E | Shift down / up (switches to manual) |
 | T | Back to automatic |
 | C | Cycle camera |
-| V | Garage: change car (1–6 to choose) |
+| V | Garage: buy or drive an owned car |
+| J | Contract board |
 | Tab | Full map |
 | R / Shift+R | Repair and drop back onto the nearest lane (Shift also tidies up knocked-over props) |
-| Z | Slow motion (¼ speed) |
+| Z | Slow motion (¼ speed, free roam only) |
 | M | Mute |
 | G | Graphics quality (low / medium / high) |
 | H | Hide the controls panel |
 
 Gamepads work (left stick, triggers, A for handbrake), and phones get on-screen buttons.
 
+## Career and contracts
+
+You start with $2,500, the Commuter sedan, and the Metro hatchback. **J** opens 25 contracts across five tiers: deliveries, checkpoint races, clean driving, drifting, and police escapes. **V** opens the 24-car garage. Each car has a cash price and a rank requirement.
+
+Starting a contract takes you to its road start and repairs your car. Follow the green world marker, directional arrow and map checkpoint line. Delivery stops require two stationary seconds. Race checkpoints must be crossed in order. Clean driving counts asphalt distance at 18–108 km/h and resets after collisions. Drift points require a moving, grounded slide on asphalt. Escape contracts start a pursuit; evade it after driving at least 150 m. Recovery or being busted ends the run without a reward. Menus pause gameplay and the timer; slow motion is disabled during contracts.
+
+Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 10. Police fines deduct available cash without putting the wallet into debt. Recovery and repairs stay free so a damaged starter never blocks progression.
+
+Progress saves locally under `apex.career.v1` in browser storage: cash, XP, owned and selected cars, and contract records. Active runs do not survive reload. Saves are specific to the browser and origin; this is a single-player local career, with no account or cloud sync. A blocked or full storage area is reported in the contract board, and play continues in memory.
+
 ## The cars
 
-| Car | Drive | Power | Weight | 0–100 km/h |
-| --- | --- | --- | --- | --- |
-| Apex GT | Rear | ~360 hp | 1250 kg | 5.6 s |
-| Commuter | Front | ~190 hp | 1400 kg | 8.9 s |
-| Hot Hatch | Front | ~300 hp | 1290 kg | 8.4 s |
-| Summit (SUV) | All | ~375 hp | 1950 kg | 5.2 s |
-| Torque V8 | Rear | ~490 hp | 1720 kg | 5.4 s |
-| Vortex | All | ~735 hp | 1480 kg | 2.8 s |
+| Car | Family | Price | Rank |
+| --- | --- | --- | --- |
+| Commuter | Sedan | Starter | 1 |
+| Metro | Hatchback | Starter | 1 |
+| Sprint | Hatchback | $6,500 | 1 |
+| Heritage | Muscle coupe | $9,500 | 1 |
+| Hot Hatch | Hatchback | $11,500 | 2 |
+| Trail Estate | Sedan | $12,000 | 2 |
+| Cross City | Utility | $14,000 | 2 |
+| Club Sport | Hatchback | $15,500 | 2 |
+| Executive | Sedan | $18,000 | 2 |
+| Summit | Utility | $20,000 | 2 |
+| Sportline | Sedan | $23,000 | 3 |
+| Rover XL | Utility | $26,000 | 3 |
+| Rally Cross | Hatchback | $28,000 | 3 |
+| Torque V8 | Muscle coupe | $30,000 | 3 |
+| Trail Scout | Utility | $32,000 | 3 |
+| Barracuda | Muscle coupe | $35,000 | 3 |
+| Interceptor | Sedan | $38,000 | 4 |
+| Apex GT | Grand tourer | $42,000 | 4 |
+| Alpine Sport | Utility | $46,000 | 4 |
+| Falcon RS | Grand tourer | $55,000 | 4 |
+| Endurance GT | Grand tourer | $68,000 | 5 |
+| Vortex | Supercar | $92,000 | 5 |
+| Spectre | Supercar | $125,000 | 6 |
+| Zenith | Supercar | $180,000 | 7 |
 
 Each has its own body style, gearing, torque curve, grip, brakes and centre of gravity. The tyre model works per wheel. Loads shift front to back under braking and acceleration, and side to side in corners, shared between the axles by roll stiffness. Tyres lose efficiency as load rises, slip angles build up over a short distance of rolling, and each wheel gets its own share of drive, brakes and handbrake. Peak lateral grip is about 1.0–1.15 g for the road cars and 1.27 g for the Vortex. A stability assist steers the car where you point it and catches slides. It mostly lets go just after a handbrake pull, or when you hold full throttle and steer into the slide, so you can still drift. It's lightest on the rear-drive cars. Steering into a slide always gets enough lock to catch it, the cars gain a little downforce at speed, and traction control stops wheelspin on launch. Front-drive cars spin their front wheels and understeer under power; rear-drive cars oversteer; all-wheel drive splits the torque 42/58. All of them stop from 100 km/h in about 40 m.
 
@@ -152,6 +181,9 @@ Together these took a typical downtown frame from about 1,540 draw calls and 3.6
 - `car-studio.html` — interactive model inspection
 - `tools/build_cars.py` — Blender vehicle authoring and export
 - `art/vehicles/` — editable Blender source and studio renders
+- `src/career.js` — persistent wallet, ownership, rank and renderer-independent mission rules
+- `src/missions.js` — road-based contracts, world markers, mission board and results
+- `assets/cars/designs.json` — 24 authored shape definitions and economy metadata
 - `src/style.css` — HUD and overlay styles
 - `src/post.js` — HDR post-processing: ambient occlusion, bloom, tone mapping and grade
 - `src/softbody.js` — the lattice solver and free-form deformation
@@ -161,7 +193,7 @@ Together these took a typical downtown frame from about 1,540 draw calls and 3.6
 - `src/police.js` — offences, wanted level, bounty, evasion and busting, the HUD stars and the siren
 - `src/main.js` — scene, player physics, car presets, collisions, damage, audio, input, camera, HUD and loop
 
-Car tuning lives in `PRESETS` in `src/main.js`. Traffic density is `DENSITY` in `src/city.js`; the pool size is `max` in the `createTraffic` call. In the browser console, `apex.car`, `apex.crash` and `apex.traffic.vehicles` show live state, and `apex.chooseCar(apex.PRESETS[n])` swaps cars.
+Base physics tuning lives in `BASE_PRESETS` in `src/main.js`; per-car shape, paint, power/mass scaling, price and rank live in `assets/cars/designs.json`. Rebuilding derives `assets/cars/cars.json` from those definitions. Traffic density is `DENSITY` in `src/city.js`; the pool size is `max` in the `createTraffic` call. In the browser console, `apex.car`, `apex.crash` and `apex.traffic.vehicles` show live state, and `await apex.chooseCar(apex.PRESETS[n])` swaps owned cars outside active contracts.
 
 ## Assets
 
@@ -176,14 +208,17 @@ Grass is two instanced layers that follow the camera: dense clumps to about 50 m
 
 ### Cars
 
-The six cars are now **original Blender models**, generated by `tools/build_cars.py`. Each preset has a distinct body: GT, sedan, hatchback, SUV, muscle coupe and supercar. The previous downloaded vehicle pack has been replaced.
+The 24 cars are **original Blender models**, generated by `tools/build_cars.py`. Six construction families provide 24 body profiles with different lengths, widths, roof heights, wheelbases, cabin proportions and wheel designs. The previous downloaded vehicle pack has been replaced.
 
 The editable source is `art/vehicles/apex-vehicles.blend`, with studio renders and rebuilding instructions beside it. Exported GLBs live in `assets/cars/custom/`. Open **`car-studio.html`** to orbit and inspect each model, switch camera angles, or see the wireframe.
 
 The models have sculpted body skins, open wheel arches, passenger cavities, curved glass, panel gaps, lamps, interiors, forged-style wheels, brake discs and stationary calipers. Body geometry is copied when it needs to crumple. Authored Blender normals are preserved on undamaged and repaired surfaces.
 
-`assets/cars/cars.json` maps stable IDs to files. The player presets use explicit IDs, while traffic selects from the collection. A missing player model falls back to its procedural body without changing the other presets. To add a model, use an explicit `id`, `file`, `length`, `forward` and `up`. Set `authored: true` for this collection's material handling.
+`assets/cars/cars.json` maps stable IDs to files. The player presets use explicit IDs, while traffic selects from the collection. Six traffic models preload; other models load on demand. A failed purchase download does not charge cash. Startup retains a procedural fallback if a saved model is unavailable. To add a model, use an explicit `id`, `file`, `length`, `forward` and `up`. Set `authored: true` for this collection's material handling.
 
 ## Verification
 
-Run `node --test tests/*.test.cjs` for HDR sun-direction and authored-normal regression tests. Serve the project and check all six garage presets and graphics quality levels for a rendering smoke test.
+Run `node --test tests/*.test.cjs` for career transactions, save validation, mission lifecycle, reward deduplication, HDR sun-direction and authored-normal regression tests. Browser smoke tests additionally cover all 24 model loads, menu flows, completion payouts, purchases, persistence, recovery and responsive layouts.
+
+
+For the browser suite and preview generator, install development tools with `npm ci`. The suite uses installed Google Chrome. Start `python3 -m http.server 8085 --bind 127.0.0.1` in another terminal, then run `npm run test:browser`. Set `APEX_URL` to use a different server address. `npm run render:cars` regenerates the garage JPEGs from the actual game loader in the model studio.

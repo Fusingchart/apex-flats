@@ -1,10 +1,10 @@
 # Apex original vehicle collection
 
-Six original car designs authored with Blender 4.5 LTS. These are custom generic designs, not replicas of production cars and not downloaded Sketchfab meshes.
+24 original car designs authored with Blender 4.5 LTS. These are custom generic designs, not replicas of production cars and not downloaded Sketchfab meshes.
 
 - `apex-vehicles.blend`: editable scene, with each named car in its own collection. Assemblies are arranged separately on the studio floor. Wheels have explicit parents; brakes, lenses, mirrors and body panels remain separate objects.
-- `*-studio.png`: Cycles renders of each model, before game conversion.
-- `../../tools/build_cars.py`: deterministic, editable Blender modeling script. Shape parameters are in `DESIGNS`.
+- `*-studio.png`: Cycles renders of the six founding models, before game conversion.
+- `../../tools/build_cars.py`: deterministic, editable Blender modeling script. Shape parameters are in `assets/cars/designs.json`; it also defines price, rank and physics scaling. The build derives the game manifest from this file.
 - `../../assets/cars/custom/*.glb`: self-contained game exports.
 - [Interactive model viewer](../../car-studio.html): orbit, zoom, front/rear/profile views, wireframe and model switching using the game's actual model loader.
 

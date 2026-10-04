@@ -115,14 +115,7 @@ def cylinder_x(name,c,r,width,mat,steps=48):return lathe_x(name,c,[(-width/2,0),
 
 def parent_to(ob,parent):ob.parent=parent
 
-DESIGNS=[
- dict(id='gt',name='Apex GT',L=4.55,W=1.94,R=.355,axles=(-1.39,1.30),belt=.93,H=1.29,rf=.22,rr=-.80,bf=.96,br=-1.60,roofW=.66,color=(.018,.16,.28),spokes=5,doors=2,wing=True),
- dict(id='sedan',name='Commuter',L=4.78,W=1.86,R=.345,axles=(-1.45,1.40),belt=1.02,H=1.48,rf=.32,rr=-.93,bf=1.04,br=-1.71,roofW=.67,color=(.48,.53,.59),spokes=10,doors=4),
- dict(id='hatchback',name='Hot Hatch',L=4.22,W=1.84,R=.34,axles=(-1.29,1.23),belt=1.00,H=1.45,rf=.32,rr=-1.40,bf=.97,br=-1.83,roofW=.68,color=(.62,.025,.04),spokes=5,doors=4,hatch=True),
- dict(id='suv',name='Summit',L=4.82,W=2.00,R=.405,axles=(-1.42,1.44),belt=1.18,H=1.80,rf=.45,rr=-1.55,bf=1.12,br=-2.03,roofW=.76,color=(.19,.27,.20),spokes=6,doors=4,hatch=True,suv=True),
- dict(id='coupe',name='Torque V8',L=4.67,W=1.96,R=.36,axles=(-1.42,1.34),belt=1.01,H=1.36,rf=.03,rr=-.96,bf=.81,br=-1.67,roofW=.66,color=(.55,.16,.025),spokes=5,doors=2,muscle=True),
- dict(id='supercar',name='Vortex',L=4.62,W=2.02,R=.355,axles=(-1.38,1.40),belt=.97,H=1.23,rf=.44,rr=-.59,bf=1.14,br=-1.53,roofW=.63,color=(.9,.22,.025),spokes=10,doors=2,supercar=True,wing=True),
-]
+DESIGNS=json.loads((ROOT/'assets/cars/designs.json').read_text())
 
 def build(d):
     global COLLECTION
@@ -337,6 +330,14 @@ def build(d):
     print('BUILT',d['id'],len(COLLECTION.objects),'objects',tris,'faces',flush=True)
     return COLLECTION,root
 
+# The manifest is derived from the same design data as the geometry.
+kinds={'gt':'Grand tourer','sedan':'Sedan','hatchback':'Hatchback','suv':'Utility','coupe':'Muscle coupe','supercar':'Supercar'}
+manifest=[dict(id=d['id'],name=d['name'],file='custom/'+d['id']+'.glb',length=d['L'],up='+y',forward='+z',authored=True,
+    credit='Original Apex Flats vehicle; authored in Blender with tools/build_cars.py',source='art/vehicles/apex-vehicles.blend',
+    base=d['base'],price=d['price'],level=d['level'],power=d['power'],massScale=d['massScale'],paint=d['color'],kind=kinds[d['base']],
+    description=f"{d['L']:.2f} m {kinds[d['base']].lower()} · {d['doors']} doors · {d['spokes']}-spoke alloys") for d in DESIGNS]
+(ROOT/'assets/cars/cars.json').write_text(json.dumps(manifest,indent=2)+'\n')
+
 selected=os.environ.get('APEX_CAR_IDS','').split(',')
 models=[d for d in DESIGNS if not selected[0] or d['id'] in selected]
 assets=[(d,*build(d)) for d in models]
@@ -355,10 +356,10 @@ if os.environ.get('APEX_RENDER')=='1':
         for _,c,_ in assets:c.hide_render=c!=col
         scene.render.filepath=str(BLEND/(d['id']+'-studio.png'));bpy.ops.render.render(write_still=True)
 for i,(d,col,root) in enumerate(assets):
-    col.hide_render=False;root.location=xyz(((i%3)*3.6,0,-(i//3)*6))
+    col.hide_render=False;root.location=xyz(((i%6)*3.6,0,-(i//6)*6))
 # Source opens with every model separated on the floor.
 if len(assets)>1:
-    cam.location=xyz((14,12,15));cam.rotation_euler=(Vector(xyz((3.6,.6,-2.5)))-cam.location).to_track_quat('-Z','Y').to_euler();camd.lens=48
+    cam.location=xyz((26,25,26));cam.rotation_euler=(Vector(xyz((9,.6,-9)))-cam.location).to_track_quat('-Z','Y').to_euler();camd.lens=48
 bpy.context.preferences.filepaths.save_version=0
 bpy.ops.wm.save_as_mainfile(filepath=str(BLEND/'apex-vehicles.blend'),compress=True)
 print('Saved editable Blender source.',flush=True)

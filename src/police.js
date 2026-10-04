@@ -213,9 +213,11 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted 
       const boxed = sp < 1.5 && P.units().some(v => v.state === 'pursue' && Math.hypot(v.x - player.x, v.z - player.z) < 8 && Math.hypot(v.vx, v.vz) < 4);
       S.bustT = boxed ? S.bustT + dt : Math.max(0, S.bustT - dt * 2);
       if (S.bustT > 3) {
-        say('Busted', `Paid ${money(S.bounty)} in fines`, 3500, 'red big');
+        const fine = S.bounty;
+        const paid = onBusted(fine);
+        say('Busted', `Paid ${money(paid ?? fine)} in fines`, 3500, 'red big');
         S.busted++; S.bounty = 0; S.level = 0; S.heat = 0; S.bustT = 0; S.downed = 0;
-        P.standDown(); onBusted();
+        P.standDown();
       }
     } else if (S.bounty > 0) S.bounty = Math.max(0, S.bounty - 3 * dt); // fades slowly while you keep your nose clean
 
