@@ -2,6 +2,7 @@
 """Build Apex Flats as a single HTML file with its runtime assets embedded."""
 from __future__ import annotations
 
+import argparse
 import base64
 import io
 import json
@@ -13,7 +14,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT = Path('/Users/MasterOogway/Documents/claude-gta5-remake.html')
+DEFAULT_OUTPUT = ROOT / 'dist' / 'apex-flats.html'
 
 
 def read_cdn(url: str) -> str:
@@ -139,6 +140,9 @@ def inline_script_tag(match: re.Match[str]) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('-o', '--out', type=Path, default=DEFAULT_OUTPUT, help=f'where to write the single HTML file (default: {DEFAULT_OUTPUT.relative_to(ROOT)})')
+    output = parser.parse_args().out.expanduser().resolve()
     html = (ROOT / 'index.html').read_text(encoding='utf-8')
     assets = make_asset_map()
 
@@ -198,9 +202,9 @@ def main() -> None:
     if '__embeddedAssets' not in html or external_scripts:
         raise RuntimeError('Standalone conversion left an unexpected external script or failed to install its asset map.')
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(html, encoding='utf-8')
-    print(f'Wrote {OUTPUT} ({OUTPUT.stat().st_size:,} bytes; {len(assets)} embedded assets).')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(html, encoding='utf-8')
+    print(f'Wrote {output} ({output.stat().st_size:,} bytes; {len(assets)} embedded assets).')
 
 
 if __name__ == '__main__':
