@@ -6,7 +6,7 @@
   <title>Apex Flats</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="src/style.css?v=29">
+  <link rel="stylesheet" href="src/style.css?v=30">
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -22,6 +22,7 @@
     <b>T</b><span>Back to automatic</span>
     <b>C</b><span>Camera</span>
     <b>V / J</b><span>Garage / contracts</span>
+    <b>B</b><span>Business (CEO)</span>
     <b>Tab</b><span>Full map</span>
     <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
     <b>Z</b><span>Slow motion</span>
@@ -90,9 +91,11 @@
 </div>
 
 
-<div id="career-hud" class="panel"><div><strong id="career-cash">$2,500</strong><span id="career-rank">RANK 1</span><small id="career-owned"></small></div><button id="open-missions">Contracts <kbd>J</kbd></button><button id="open-garage">Garage <kbd>V</kbd></button></div>
+<div id="career-hud" class="panel"><div><strong id="career-cash">$2,500</strong><span id="career-rank">RANK 1</span><small id="career-owned"></small></div><button id="open-missions">Contracts <kbd>J</kbd></button><button id="open-garage">Garage <kbd>V</kbd></button><button id="open-empire">Business <kbd>B</kbd></button></div>
+<div id="biz-prompt" class="panel" hidden></div><div id="biz-raid" hidden></div>
+<div id="empire" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="empire-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">APEX HOLDINGS / CEO</div><h2 id="empire-title">Build your empire.</h2></div><button id="close-empire" class="action">Back to drive · Esc</button></div><p>Start small with a courier depot, register the company with an office, then grow into salvage, import/export, nightlife, freight and prototype labs. Keep them supplied, sell what they make, pay the upkeep, and protect them from raids.</p><div id="empire-body"></div></div></div>
 <div id="active-job" class="panel" hidden><div class="job-meta">ACTIVE CONTRACT <strong id="job-time"></strong></div><h3 id="job-name"></h3><div id="job-progress"></div><p><span id="job-arrow">↑</span> <span id="job-target"></span></p></div>
-<div id="mission-board" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="board-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">ASHBY VALLEY / DRIVER NETWORK</div><h2 id="board-title">Find your next run.</h2></div><button id="close-missions" class="action">Back to drive · Esc</button></div><p>25 contracts. Cash, XP, and medals on every clear. First clears pay a 50% cash bonus. Gold pays 25% extra; silver pays 10% extra.</p><p class="subtle">Starting a contract takes you to the event start and repairs your car. Recovery ends the run. Menus pause the clock. Green map lines show checkpoint order, not turn-by-turn directions.</p><div class="board-tools"><strong id="board-balance"></strong><select id="mission-filter" aria-label="Filter contracts"><option value="all">All contracts</option><option value="delivery">Delivery</option><option value="race">Checkpoint races</option><option value="clean">Clean driving</option><option value="drift">Drift</option><option value="escape">Police escape</option></select><button id="abandon-job" class="action" hidden>Abandon current contract</button></div><div id="contract-list"></div><p id="save-status" class="subtle"></p></div></div>
+<div id="mission-board" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="board-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">ASHBY VALLEY / DRIVER NETWORK</div><h2 id="board-title">Find your next run.</h2></div><button id="close-missions" class="action">Back to drive · Esc</button></div><p>50 contracts across ten tiers. Later tiers need a fast car, clean lines and intact cargo. Cash, XP, and medals on every clear. First clears pay a 50% cash bonus. Gold pays 25% extra; silver pays 10% extra.</p><p class="subtle">Starting a contract takes you to the event start and repairs your car. Recovery ends the run. Menus pause the clock. Green map lines show checkpoint order, not turn-by-turn directions.</p><div class="board-tools"><strong id="board-balance"></strong><select id="mission-filter" aria-label="Filter contracts"><option value="all">All contracts</option><option value="delivery">Delivery</option><option value="race">Checkpoint races</option><option value="clean">Clean driving</option><option value="drift">Drift</option><option value="escape">Police escape</option></select><button id="abandon-job" class="action" hidden>Abandon current contract</button></div><div id="contract-list"></div><p id="save-status" class="subtle"></p></div></div>
 <div id="mission-result" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-content"><div id="result-title" class="eyebrow"></div><h2 id="result-name"></h2><p id="result-reason"></p><strong id="result-pay"></strong><div class="result-actions"><button id="result-close" class="action">Keep driving</button><button id="result-retry" class="action">Retry contract</button><button id="result-board" class="action">Find another run</button></div></div></div>
 <canvas id="bigmap" width="1100" height="1100" hidden aria-label="Full map"></canvas>
 
@@ -108,8 +111,10 @@
 <script src="src/city.js?v=29"></script>
 <script src="src/traffic.js?v=29"></script>
 <script src="src/police.js?v=29"></script>
-<script src="src/career.js?v=29"></script>
-<script src="src/missions.js?v=29"></script>
-<script src="src/main.js?v=29"></script>
+<script src="src/career.js?v=30"></script>
+<script src="src/missions.js?v=30"></script>
+<script src="src/business.js?v=30"></script>
+<script src="src/empire.js?v=30"></script>
+<script src="src/main.js?v=30"></script>
 </body>
 </html>

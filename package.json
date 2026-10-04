@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "test:browser": "node tests/browser.smoke.cjs && node tests/browser.rewards.cjs && node tests/browser.models.cjs",
+    "test:browser": "node tests/browser.smoke.cjs && node tests/browser.rewards.cjs && node tests/browser.models.cjs && node tests/browser.business.cjs",
     "render:cars": "node tools/render_car_previews.cjs"
   },
   "devDependencies": { "playwright": "1.63.0" }

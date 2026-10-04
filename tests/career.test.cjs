@@ -35,6 +35,6 @@ test('escape needs a pursuit followed by actual escape and distance',()=>{
 });
 test('catalog has 24 uniquely authored, priced, ranked cars',()=>{
  const designs=require('../assets/cars/designs.json');assert.equal(catalog.length,24);assert.equal(new Set(catalog.map(c=>c.id)).size,24);
- for(const c of catalog){const d=designs.find(d=>d.id===c.id);assert.ok(d);assert.equal(c.length,d.L);assert.ok(Number.isSafeInteger(c.price)&&c.price>=0);assert.ok(c.level>=1&&c.level<=10);assert.equal(c.authored,true);}
+ for(const c of catalog){const d=designs.find(d=>d.id===c.id);assert.ok(d);assert.equal(c.length,d.L);assert.ok(Number.isSafeInteger(c.price)&&c.price>=0);assert.ok(c.level>=1&&c.level<=50);assert.equal(c.level,d.level);assert.equal(c.authored,true);}
  assert.equal(new Set(designs.map(d=>[d.L,d.W,d.H,...d.axles].join(','))).size,24);
 });

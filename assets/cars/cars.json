@@ -11,7 +11,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "gt",
     "price": 42000,
-    "level": 4,
+    "level": 7,
     "power": 1,
     "massScale": 1,
     "paint": [
@@ -103,7 +103,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "coupe",
     "price": 30000,
-    "level": 3,
+    "level": 4,
     "power": 1,
     "massScale": 1,
     "paint": [
@@ -126,7 +126,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "supercar",
     "price": 92000,
-    "level": 5,
+    "level": 11,
     "power": 1,
     "massScale": 1,
     "paint": [
@@ -218,7 +218,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "hatchback",
     "price": 28000,
-    "level": 3,
+    "level": 4,
     "power": 1.32,
     "massScale": 1.04,
     "paint": [
@@ -264,7 +264,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "sedan",
     "price": 23000,
-    "level": 3,
+    "level": 4,
     "power": 1.7,
     "massScale": 1.04,
     "paint": [
@@ -310,7 +310,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "sedan",
     "price": 38000,
-    "level": 4,
+    "level": 7,
     "power": 2.1,
     "massScale": 1.16,
     "paint": [
@@ -356,7 +356,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "suv",
     "price": 26000,
-    "level": 3,
+    "level": 4,
     "power": 1.03,
     "massScale": 1.22,
     "paint": [
@@ -379,7 +379,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "suv",
     "price": 46000,
-    "level": 4,
+    "level": 7,
     "power": 1.45,
     "massScale": 0.95,
     "paint": [
@@ -402,7 +402,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "suv",
     "price": 32000,
-    "level": 3,
+    "level": 4,
     "power": 0.88,
     "massScale": 0.9,
     "paint": [
@@ -448,7 +448,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "coupe",
     "price": 35000,
-    "level": 3,
+    "level": 4,
     "power": 1.2,
     "massScale": 1.13,
     "paint": [
@@ -471,7 +471,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "gt",
     "price": 55000,
-    "level": 4,
+    "level": 7,
     "power": 1.25,
     "massScale": 0.91,
     "paint": [
@@ -494,7 +494,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "gt",
     "price": 68000,
-    "level": 5,
+    "level": 11,
     "power": 1.48,
     "massScale": 1.22,
     "paint": [
@@ -517,7 +517,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "supercar",
     "price": 125000,
-    "level": 6,
+    "level": 15,
     "power": 1.22,
     "massScale": 0.96,
     "paint": [
@@ -540,7 +540,7 @@
     "source": "art/vehicles/apex-vehicles.blend",
     "base": "supercar",
     "price": 180000,
-    "level": 7,
+    "level": 20,
     "power": 1.47,
     "massScale": 0.9,
     "paint": [

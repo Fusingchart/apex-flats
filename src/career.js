@@ -2,8 +2,8 @@
 (function(root) {
 'use strict';
 const KEY = 'apex.career.v1';
-const integer = (n, fallback=0) => Number.isSafeInteger(n) && n >= 0 ? Math.min(n, 100000000) : fallback;
-const levelOf = xp => Math.min(10, 1 + Math.floor(Math.sqrt(xp / 350)));
+const integer = (n, fallback=0) => Number.isSafeInteger(n) && n >= 0 ? Math.min(n, 1e12) : fallback;
+const levelOf = xp => Math.min(50, 1 + Math.floor(Math.sqrt(xp / 350)));
 function createCareer(catalog, storage) {
   const starter = ['sedan','metro'];
   const fresh = () => ({version:1,cash:2500,xp:0,owned:[...starter],selected:'sedan',records:{},totalEarned:0});
@@ -14,6 +14,7 @@ function createCareer(catalog, storage) {
       state.cash=integer(raw.cash,2500);state.xp=integer(raw.xp);state.totalEarned=integer(raw.totalEarned);
       state.owned=[...new Set([...starter,...(Array.isArray(raw.owned)?raw.owned:[]).filter(id=>catalog.some(c=>c.id===id))])];
       state.selected=state.owned.includes(raw.selected)?raw.selected:'sedan';
+      if(raw.empire && typeof raw.empire==='object')state.empire=raw.empire;
       if(raw.records && typeof raw.records==='object') for(const [id,r] of Object.entries(raw.records)) {
         if(!/^contract-\d+$/.test(id)||!r||typeof r!=='object')continue;
         state.records[id]={count:integer(r.count),best:Number.isFinite(r.best)&&r.best>0?r.best:0,medal:['bronze','silver','gold'].includes(r.medal)?r.medal:'bronze'};
@@ -38,16 +39,19 @@ function createCareer(catalog, storage) {
     const tiers=['bronze','silver','gold'];state.records[job.id]={count:(old?.count||0)+1,best:Math.min(old?.best||Infinity,seconds),medal:tiers[Math.max(tiers.indexOf(old?.medal),tiers.indexOf(medal))]};save();
     return {cash,xp,medal,first,rankUp:levelOf(state.xp)>oldLevel};
   }
+  function earn(cash,xp){const oldLevel=levelOf(state.xp);cash=Math.max(0,Math.round(cash||0));xp=Math.max(0,Math.round(xp||0));state.cash+=cash;state.xp+=xp;state.totalEarned+=cash;save();return {cash,xp,rankUp:levelOf(state.xp)>oldLevel};}
   function fine(amount){const paid=Math.min(state.cash,Math.max(0,Math.round(Number.isFinite(amount)?amount:0)));state.cash-=paid;save();return paid;}
-  return {get state(){return state;},get level(){return levelOf(state.xp);},get saveError(){return saveError;},save,purchase,select,reward,fine};
+  return {get state(){return state;},get level(){return levelOf(state.xp);},get saveError(){return saveError;},save,purchase,select,reward,earn,fine};
 }
 function createMissionEngine(career,onResult=()=>{}) {
   let active=null;
-  function finish(ok,reason){if(!active)return null;const a=active;active=null;const reward=ok?career.reward(a.job,Math.max(.01,a.elapsed)):null;const result={ok,reason,job:a.job,elapsed:a.elapsed,reward};onResult(result);return result;}
+  function finish(ok,reason){if(!active)return null;const a=active;active=null;
+    if(!ok)a.job.onFail?.(a,reason);
+    const reward=ok?(a.job.pay?a.job.pay(a):career.reward(a.job,Math.max(.01,a.elapsed))):null;const result={ok,reason,job:a.job,elapsed:a.elapsed,reward};onResult(result);return result;}
   function start(job,sample){
     if(active)return {ok:false,reason:'Finish or abandon your current contract'};
-    if(career.level<job.level)return {ok:false,reason:`Reach rank ${job.level}`};
-    active={job,elapsed:0,stage:0,hold:0,distance:0,drift:0,clean:0,sawWanted:false,last:{x:sample.x,z:sample.z},lastDamage:sample.damage||0};return {ok:true};
+    if(career.level<(job.level||1))return {ok:false,reason:`Reach rank ${job.level}`};
+    active={job,elapsed:0,stage:0,hold:0,distance:0,drift:0,clean:0,integrity:1,sawWanted:false,last:{x:sample.x,z:sample.z},lastDamage:sample.damage||0};return {ok:true};
   }
   function update(dt,s){
     const a=active;if(!a||!(dt>0)||!Number.isFinite(dt))return;
@@ -55,7 +59,9 @@ function createMissionEngine(career,onResult=()=>{}) {
     const moved=Math.hypot(s.x-a.last.x,s.z-a.last.z);a.last={x:s.x,z:s.z};
     if(!Number.isFinite(moved)||moved>Math.max(10,dt*150))return finish(false,'Run interrupted by relocation');
     a.distance+=moved;
-    const hit=(s.damage||0)>a.lastDamage+.002;a.lastDamage=s.damage||0;
+    const dmg=(s.damage||0)-a.lastDamage,hit=dmg>.002;a.lastDamage=s.damage||0;
+    // cargo takes knocks: a 30 km/h wall hit costs ~8% (fragile ~15%), a big crash up to a third
+    if(hit&&a.job.cargo){a.integrity=Math.max(0,a.integrity-Math.min(.35,dmg*(a.job.fragile?.6:.35)));if(a.job.fragile&&a.integrity<.5)return finish(false,'Cargo destroyed');}
     if(a.job.type==='clean'&&hit){a.clean=0;}
     else if(a.job.type==='clean'&&s.speed>5&&s.speed<30&&s.surface==='asphalt')a.clean+=moved;
     if(a.job.type==='drift'&&s.speed>8&&s.speed<65&&Math.abs(s.slip)>15&&Math.abs(s.slip)<80&&s.surface==='asphalt'&&!s.air&&!hit)a.drift+=dt*Math.min(Math.abs(s.slip),55)*s.speed/10;

@@ -25,6 +25,7 @@ Three.js and the fonts load from a CDN, so the first load needs an internet conn
 | C | Cycle camera |
 | V | Garage: buy or drive an owned car |
 | J | Contract board |
+| B | Business (Apex Holdings CEO panel) |
 | Tab | Full map |
 | R / Shift+R | Repair and drop back onto the nearest lane (Shift also tidies up knocked-over props) |
 | Z | Slow motion (¼ speed, free roam only) |
@@ -36,13 +37,27 @@ Gamepads work (left stick, triggers, A for handbrake), and phones get on-screen 
 
 ## Career and contracts
 
-You start with $2,500, the Commuter sedan, and the Metro hatchback. **J** opens 25 contracts across five tiers: deliveries, checkpoint races, clean driving, drifting, and police escapes. **V** opens the 24-car garage. Each car has a cash price and a rank requirement.
+You start with $2,500, the Commuter sedan, and the Metro hatchback. **J** opens 50 contracts across ten tiers (ranks 1–22): deliveries, checkpoint races, clean driving, drifting, and police escapes. Later tiers chain several legs across the valley with tighter limits; deliveries from tier 4 carry cargo that crashes damage (lower pay), and from tier 7 it is fragile (below 50% the job fails). Escapes go up to five stars. **V** opens the 24-car garage. Each car has a cash price and a rank requirement.
 
 Starting a contract takes you to its road start and repairs your car. Follow the green world marker, directional arrow and map checkpoint line. Delivery stops require two stationary seconds. Race checkpoints must be crossed in order. Clean driving counts asphalt distance at 18–108 km/h and resets after collisions. Drift points require a moving, grounded slide on asphalt. Escape contracts start a pursuit; evade it after driving at least 150 m. Recovery or being busted ends the run without a reward. Menus pause gameplay and the timer; slow motion is disabled during contracts.
 
-Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 10. Police fines deduct available cash without putting the wallet into debt. Recovery and repairs stay free so a damaged starter never blocks progression.
+Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 50. Police fines deduct available cash without putting the wallet into debt. Recovery and repairs stay free so a damaged starter never blocks progression.
 
-Progress saves locally under `apex.career.v1` in browser storage: cash, XP, owned and selected cars, and contract records. Active runs do not survive reload. Saves are specific to the browser and origin; this is a single-player local career, with no account or cloud sync. A blocked or full storage area is reported in the contract board, and play continues in memory.
+## Apex Holdings (business)
+
+**B** opens the CEO panel. Properties are marked on the map with **$** and in the world with light beams (amber once owned).
+
+- **Courier Depot** ($45k, rank 3) needs no office. Every other business needs an **office**: Ashby Plaza ($100k, rank 5, 3 slots), Riverside Tower ($600k, rank 12, 5 slots), Summit Penthouse ($2M, rank 22, 6 slots). Better offices add 5–20% to sale value; moving up trades the old one in at half price.
+- **Production businesses** (Courier Depot, Southbank Salvage, Harbour Import/Export, Ashby Freight Hub, Apex Prototype Labs) turn supplies into stock over time. Buy supplies from anywhere, or drive there and steal them for free (bigger businesses draw police). Selling sends you on a multi-drop delivery from the property; crashes cut the value, and failing loses a quarter of the stock. Large loads can trigger a police tip-off.
+- **Club Meridian** ($750k, rank 15) fills a safe while it is popular. Popularity fades; promote it with a checkpoint run and collect the safe in person.
+- **Upgrades** per business: equipment (faster production / slower decline), staff (+30–40% value), security (80% fewer raids).
+- **Upkeep** is charged every business day (12 minutes of play). A business you can't pay for stops until you pay it.
+- **Raids** hit busy properties. You get four minutes to reach the property and hold position, or lose 40% of the stock (half the safe).
+- **Milestones** pay out from $10k (first business) up to $1M for a $20M net worth (Valley Tycoon).
+
+Business time runs while the game is open (menus included) and stops when the tab is hidden or closed.
+
+Progress saves locally under `apex.career.v1` in browser storage: cash, XP, owned and selected cars, contract records, and the business empire. Active runs do not survive reload. Saves are specific to the browser and origin; this is a single-player local career, with no account or cloud sync. A blocked or full storage area is reported in the contract board, and play continues in memory.
 
 ## The cars
 
@@ -58,20 +73,20 @@ Progress saves locally under `apex.career.v1` in browser storage: cash, XP, owne
 | Club Sport | Hatchback | $15,500 | 2 |
 | Executive | Sedan | $18,000 | 2 |
 | Summit | Utility | $20,000 | 2 |
-| Sportline | Sedan | $23,000 | 3 |
-| Rover XL | Utility | $26,000 | 3 |
-| Rally Cross | Hatchback | $28,000 | 3 |
-| Torque V8 | Muscle coupe | $30,000 | 3 |
-| Trail Scout | Utility | $32,000 | 3 |
-| Barracuda | Muscle coupe | $35,000 | 3 |
-| Interceptor | Sedan | $38,000 | 4 |
-| Apex GT | Grand tourer | $42,000 | 4 |
-| Alpine Sport | Utility | $46,000 | 4 |
-| Falcon RS | Grand tourer | $55,000 | 4 |
-| Endurance GT | Grand tourer | $68,000 | 5 |
-| Vortex | Supercar | $92,000 | 5 |
-| Spectre | Supercar | $125,000 | 6 |
-| Zenith | Supercar | $180,000 | 7 |
+| Sportline | Sedan | $23,000 | 4 |
+| Rover XL | Utility | $26,000 | 4 |
+| Rally Cross | Hatchback | $28,000 | 4 |
+| Torque V8 | Muscle coupe | $30,000 | 4 |
+| Trail Scout | Utility | $32,000 | 4 |
+| Barracuda | Muscle coupe | $35,000 | 4 |
+| Interceptor | Sedan | $38,000 | 7 |
+| Apex GT | Grand tourer | $42,000 | 7 |
+| Alpine Sport | Utility | $46,000 | 7 |
+| Falcon RS | Grand tourer | $55,000 | 7 |
+| Endurance GT | Grand tourer | $68,000 | 11 |
+| Vortex | Supercar | $92,000 | 11 |
+| Spectre | Supercar | $125,000 | 15 |
+| Zenith | Supercar | $180,000 | 20 |
 
 Each has its own body style, gearing, torque curve, grip, brakes and centre of gravity. The tyre model works per wheel. Loads shift front to back under braking and acceleration, and side to side in corners, shared between the axles by roll stiffness. Tyres lose efficiency as load rises, slip angles build up over a short distance of rolling, and each wheel gets its own share of drive, brakes and handbrake. Peak lateral grip is about 1.0–1.15 g for the road cars and 1.27 g for the Vortex. A stability assist steers the car where you point it and catches slides. It mostly lets go just after a handbrake pull, or when you hold full throttle and steer into the slide, so you can still drift. It's lightest on the rear-drive cars. Steering into a slide always gets enough lock to catch it, the cars gain a little downforce at speed, and traction control stops wheelspin on launch. Front-drive cars spin their front wheels and understeer under power; rear-drive cars oversteer; all-wheel drive splits the torque 42/58. All of them stop from 100 km/h in about 40 m.
 

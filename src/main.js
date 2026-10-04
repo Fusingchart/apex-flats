@@ -42,7 +42,7 @@ async function ensureModel(id) {
 await Promise.all(catalog.slice(0, 6).map(c => ensureModel(c.id)));
 let storage; try { storage = localStorage; } catch(e) {}
 const career = createCareer(catalog, storage);
-let missions = null, selectingCar = false, collisionTotal = 0;
+let missions = null, empire = null, selectingCar = false, collisionTotal = 0;
 // if the photo's sun sits very low, lift it a few degrees for gameplay so streets aren't all in shadow
 const sunDir = SKY.sunDir.clone();
 { const el = Math.asin(sunDir.y), lift = Math.max(el, 0.2), hz = Math.cos(lift) / Math.hypot(sunDir.x, sunDir.z); sunDir.set(sunDir.x * hz, Math.sin(lift), sunDir.z * hz).normalize(); }
@@ -1038,15 +1038,16 @@ const camModes = ['Chase', 'Far', 'Bumper', 'Orbit'];
 let camMode = 0;
 addEventListener('keydown', e => {
   if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
-  const menuOpen = !started || !el('garage').hidden || missions?.paused;
-  if (menuOpen && !['Escape','KeyJ','KeyV'].includes(e.code)) return;
+  const menuOpen = !started || !el('garage').hidden || missions?.paused || empire?.open;
+  if (menuOpen && !['Escape','KeyJ','KeyV','KeyB'].includes(e.code)) return;
   if (e.repeat) { if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); return; }
   keys[e.code] = true;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyC') camMode = (camMode + 1) % camModes.length;
   if (e.code === 'KeyR' && started && !missions?.paused && el('garage').hidden) respawn(e.shiftKey);
   if (e.code === 'KeyV') toggleGarage();
-  if (e.code === 'KeyJ') missions?.toggle();
+  if (e.code === 'KeyJ') { empire?.toggle(false); missions?.toggle(); }
+  if (e.code === 'KeyB' && started) empire?.toggle();
   if (e.code === 'Tab') { e.preventDefault(); bigMap.open = !bigMap.open; el('bigmap').hidden = !bigMap.open; }
   if (e.code === 'KeyZ' && !missions?.engine.active) timeScale = timeScale === 1 ? 0.25 : 1;
   if (e.code === 'KeyM') audio.muted = !audio.muted;
@@ -1219,7 +1220,7 @@ function drawMap() {
     }
     g.stroke();
   }
-  missions?.drawMap(g, X, Y);
+  missions?.drawMap(g, X, Y); empire?.drawMap(g, X, Y);
   for (const v of traffic.vehicles) {
     if (v.state === 'idle') continue;
     const x = X(v.x, v.z), y = Y(v.x, v.z);
@@ -1270,7 +1271,7 @@ function drawBigMap() {
     bigMap.base = off;
   }
   g.drawImage(bigMap.base, 0, 0);
-  missions?.drawMap(g, x => X(x), (x,z) => Y(z));
+  missions?.drawMap(g, x => X(x), (x,z) => Y(z)); empire?.drawMap(g, x => X(x), (x,z) => Y(z));
   g.fillStyle = 'rgba(243,236,228,0.85)';
   for (const v of traffic.vehicles) if (v.state !== 'idle') { g.fillStyle = v.police ? '#4f7bff' : 'rgba(243,236,228,0.85)'; g.fillRect(X(v.x) - 1.5, Y(v.z) - 1.5, 3, 3); }
   g.save(); g.translate(X(car.x), Y(car.z)); g.rotate(Math.PI - car.h + Math.PI);
@@ -1434,14 +1435,14 @@ async function pickGarage(pr) {
 function toggleGarage(force) {
   const g = el('garage'), open = force ?? g.hidden;
   g.hidden = !open; clearDrivingInput();
-  if (open) { missions?.toggle(false); renderCards(el('garage-cards'), pickGarage); el('close-garage').focus(); }
+  if (open) { missions?.toggle(false); if (empire?.open) empire.toggle(false); renderCards(el('garage-cards'), pickGarage); el('close-garage').focus(); }
 }
 el('close-garage').onclick = () => toggleGarage(false);
 el('open-garage').onclick = () => { start(); toggleGarage(); };
 el('garage-filter').onchange = () => renderCards(el('garage-cards'), pickGarage);
 addEventListener('blur', clearDrivingInput);
 addEventListener('keydown', e => {
-  if (e.code === 'Escape') { toggleGarage(false); missions?.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
+  if (e.code === 'Escape') { toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
   if (e.code === 'KeyG' && started && !missions?.paused && el('garage').hidden) { qualityPinned = true; setQuality((quality + 2) % 3); }
 });
 function start() {
@@ -1462,7 +1463,8 @@ const traffic = createTraffic({ scene, city, rand, nearSolids, localObstacle, pl
 const police = createPolice({ traffic, city, player: car, audio, scene, onBusted: fine => { const paid = career.fine(fine); respawn(false); missions?.refresh(); return paid; } });
 missions = createMissionSystem({city,scene,car,career,getDamage:()=>collisionTotal/10000,getWanted:()=>police.state.level,
   travel:pose=>{start();timeScale=1;resetCar(pose);camSnap=true;clearDrivingInput();},repair:()=>{repairCar();applyDamage();},onPause:clearDrivingInput});
-missions.onPursuit = level => police.raise(level, 'Escape contract', 500 * level);
+missions.onPursuit = (level, job) => police.raise(level, job?.biz ? 'Police tip-off' : 'Escape contract', 500 * level);
+empire = createEmpireSystem({city,scene,car,career,missions,catalog,travel:pose=>{start();timeScale=1;resetCar(pose);camSnap=true;clearDrivingInput();},onPause:clearDrivingInput});
 renderCards(el('start-cards'), async pr => { if(await chooseCar(pr)) start(); });
 
 const STEP = 1 / 240;
@@ -1479,7 +1481,7 @@ function frame(now) {
     // already at the lowest resolution and still slow: step the quality down once
     if (pixelRatio <= 0.61 && frameAvg > 24 && quality > 0 && !qualityPinned) setQuality(quality - 1, true);
   }
-  const paused = !started || !el('garage').hidden || missions.paused || selectingCar || document.hidden;
+  const paused = !started || !el('garage').hidden || missions.paused || empire.open || selectingCar || document.hidden;
   const dt = paused ? 0 : real * timeScale;
   const inp = !paused ? readInput(dt) : { gas: 0, brake: 0, steer: 0, hb: 0 };
   acc += dt;
@@ -1487,7 +1489,7 @@ function frame(now) {
   while (acc >= STEP && steps < 30) { stepCar(STEP, inp); traffic.step(STEP); acc -= STEP; steps++; }
   if (steps === 30) acc = 0;
   city.update(dt); traffic.update(dt); grass.update(dt); if (started) police.update(dt);
-  missions.update(dt);
+  missions.update(dt); if (started && !document.hidden) empire.update(real, dt);
   if (++cullTick % 6 === 0) city.cull(camera.position);
   updateLoose(dt); updateSmoke(dt); updateDebris(dt); updateSparks(dt); syncCar(dt); updateCamera(dt); updateAudio(); updateHud();
   post.render(dt);
@@ -1497,7 +1499,7 @@ camSnap = true;
 updateCamera(0);
 requestAnimationFrame(frame);
 applyDamage();
-window.apex = { career, missions, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
+window.apex = { career, missions, get empire() { return empire; }, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
   addSolid, view(mode, angle, radius = 11) { camMode = camModes.indexOf(mode); camSnap = true; orbitR = radius; if (angle !== undefined) { orbitA = angle; orbitHold = true; } } };
 el('loading').hidden = true;
 }
