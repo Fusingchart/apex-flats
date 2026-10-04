@@ -123,7 +123,7 @@ window.createTraffic = function (ctx) {
     const kit = carModel ? buildModelCar(carModel, { paint, paint2: accent }) : buildCarBody({ style, paint, lite: true });
     const group = new THREE.Group(), body = new THREE.Group(); group.add(body); scene.add(group);
     group.rotation.order = 'YXZ'; group.visible = false;
-    const soft = new SoftBody(softConfig(kit.top));
+    const soft = new SoftBody(softConfig(kit.top, kit.bodyHalfW, kit.length));
     const bindings = new Map(), lazy = [];
     for (const { mesh, opts } of kit.meshes) { body.add(mesh); if (kit.model) lazy.push([mesh, opts]); else bindings.set(mesh, soft.bind(mesh.geometry, opts || { wrinkle: 0 })); }
     const wheels = kit.model && kit.makeWheel ? [0, 1, 2, 3].map(i => {
@@ -142,11 +142,11 @@ window.createTraffic = function (ctx) {
     };
     const v = {
       id, style, kit, group, body, soft, bindings, lazy: lazy.length ? lazy : null, dented: false, wheels, drv, paint,
-      m: spec.mass, I: spec.I, cg: spec.cg, power: spec.power, a: 1.25, b: 1.35,
+      m: spec.mass, I: spec.I, cg: spec.cg, power: spec.power, a: kit.axles ? kit.axles.front : 1.25, b: kit.axles ? -kit.axles.rear : 1.35,
       x: 1e6, y: 0, z: 1e6, h: 0, vx: 0, vz: 0, w: 0, px: 1e6, pz: 1e6, ph: 0, steer: 0, ax: 0, ay: 0, slope: 0,
       throttle: 0, brake: 0, aDes: 0, gear: 1, rpm: 800, frontRot: 0, pitch: 0, pitchV: 0, roll: 0, rollV: 0,
       state: 'idle', hitDv: 0, crashDv: 0, crashT: 0, signal: 0, hazard: false, horn: 0, stillT: 0,
-      box: { type: 'box', hx: 0.95, hz: 2.26, h: kit.top, mu: 0.5, y0: 0, x: 1e6, z: 1e6, ux: 1, uz: 0 }, pool: [],
+      box: { type: 'box', hx: kit.bodyHalfW || 0.95, hz: kit.length ? kit.length / 2 : 2.26, h: kit.top, mu: 0.5, y0: 0, x: 1e6, z: 1e6, ux: 1, uz: 0 }, pool: [],
     };
     v.box.body = v;
     if (police) dressPolice(v);

@@ -1,4 +1,57 @@
 [
-  { "file": "concept.glb", "name": "Concept", "length": 4.45,
-    "credit": "Car Concept by Eric Chadwick, (c) 2024 Darmstadt Graphics Group GmbH, CC-BY 4.0 (KhronosGroup/glTF-Sample-Assets), from a public-domain model by Unity Fan" }
+  {
+    "file": "concept.glb",
+    "name": "Concept",
+    "length": 4.45,
+    "credit": "Car Concept by Eric Chadwick, (c) 2024 Darmstadt Graphics Group GmbH, CC-BY 4.0 (KhronosGroup/glTF-Sample-Assets), from a public-domain model by Unity Fan",
+    "id": "concept"
+  },
+  {
+    "id": "sedan",
+    "file": "sedan.glb",
+    "name": "Sedan",
+    "length": 4.7,
+    "forward": "+z",
+    "up": "+y",
+    "preservePaintMap": true,
+    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
+    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
+    "license": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+    "id": "hatchback",
+    "file": "hatchback.glb",
+    "name": "Hatchback",
+    "length": 4.2,
+    "forward": "+z",
+    "up": "+y",
+    "preservePaintMap": true,
+    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
+    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
+    "license": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+    "id": "suv",
+    "file": "suv.glb",
+    "name": "Suv",
+    "length": 4.7,
+    "forward": "+z",
+    "up": "+y",
+    "preservePaintMap": true,
+    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
+    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
+    "license": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+    "id": "coupe",
+    "file": "coupe.glb",
+    "name": "Coupe",
+    "length": 4.5,
+    "forward": "-z",
+    "up": "+y",
+    "preservePaintMap": true,
+    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
+    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
+    "license": "https://creativecommons.org/licenses/by/4.0/"
+  }
 ]

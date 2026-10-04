@@ -4,7 +4,7 @@ A 3D driving game in the browser, built with Three.js. You drive a city on a haz
 
 ## Run it
 
-Open `index.html` in a browser, or serve the folder:
+Serve the folder over HTTP (the model and HDR loaders require it):
 
 ```bash
 npx serve .
@@ -112,6 +112,8 @@ A 71 km/h hit on a downtown tower peaks at about 25 g and leaves the engine at 2
 
 ## Rendering
 
+Daylight uses the photographed HDR sun direction, exposure-balanced sky fill, and shadows snapped in light space at each graphics quality. A restrained colour grade preserves neutral paint and building colours.
+
 The scene renders into a half-float, 4× multisampled HDR buffer and then goes through:
 
 - **Ambient occlusion** from the depth buffer, at half resolution: 12 samples and a depth-aware blur. It darkens corners, kerbs, building bases and the ground under cars.
@@ -160,7 +162,7 @@ Car tuning lives in `PRESETS` in `src/main.js`. Traffic density is `DENSITY` in 
 
 ## Assets
 
-All photographic assets are CC0 (public domain) from [Poly Haven](https://polyhaven.com) and live in `assets/`:
+The sky, ground, building and foliage assets are CC0 (public domain) from [Poly Haven](https://polyhaven.com) and live in `assets/`:
 
 - **Sky:** the HDR panorama *Kloofendal 48d Partly Cloudy (Pure Sky)*, a sunny afternoon with the sun 47° up. It is the visible sky and the lighting environment, and the sun's direction and colour are read from it.
 - **Ground:** *Aerial Asphalt 01* (roads), *Concrete Pavement* (pavements), *Aerial Grass Rock* (open ground). Each has colour, normal and roughness maps, tiled in world space.
@@ -171,6 +173,19 @@ Grass is two instanced layers that follow the camera: dense clumps to about 50 m
 
 ### Cars
 
+Four additional body styles come from **Generic passenger car pack** by **Comrade1280**, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): [original model pack](https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5), [distribution source](https://github.com/TUM-VT/Sumonity-PassengerCars/tree/92be5975162ff9348c96d76dd6077321dce013dc).
+
+| Preset | Model |
+| --- | --- |
+| Apex GT / Vortex | Existing Car Concept |
+| Commuter | Sedan |
+| Hot Hatch | Hatchback |
+| Summit | SUV |
+| Torque V8 | Coupe |
+
+The FBX originals were converted to self-contained GLB files with 1024px textures. Adaptations include neutralized coloured paint, clear-coat PBR materials, metallic and inverted glossiness maps, separate front/rear lamp meshes, and retained wheel geometry, and welded vertices for smooth deformation normals. The coupe uses the pack's wheel C texture in place of the unavailable wheel F texture. Its forward axis is explicitly reversed. Attribution and upstream notes are retained in `assets/cars/PASSENGER-CARS-LICENSE.txt` and `assets/cars/PASSENGER-CARS-SOURCE.md`.
+
+
 Cars are real glTF models, listed in `assets/cars/cars.json`. Every car is built from these models, yours and the traffic, each with its own paint. A car gets its own copy of the body to crumple the first time it's hit.
 
 - **Car Concept** by Eric Chadwick, © 2024 Darmstadt Graphics Group GmbH, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) ([KhronosGroup/glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept)), based on a public-domain model by Unity Fan.
@@ -178,7 +193,7 @@ Cars are real glTF models, listed in `assets/cars/cars.json`. Every car is built
 **Adding a car:** put the `.glb` in `assets/cars/` and add a line to `cars.json`:
 
 ```json
-{ "file": "my-car.glb", "name": "My Car", "length": 4.6, "credit": "…" }
+{ "id": "my-car", "file": "my-car.glb", "name": "My Car", "length": 4.6, "credit": "…" }
 ```
 
 The loader works most things out from the model:
@@ -187,4 +202,8 @@ The loader works most things out from the model:
 - the four wheels (objects named wheel, tyre or rim, sorted by corner)
 - the paint (materials named paint, body or exterior), glass, head and tail lights, and mirrors
 
-If a model points the wrong way, add `"forward": "-z"` (or `+x`, `-y` and so on) and `"up": "+y"`. If its paint material has an unusual name, add `"paint": "regex"`. Your six cars use the models in list order; traffic picks at random.
+If a model points the wrong way, add `"forward": "-z"` (or `+x`, `-y` and so on) and `"up": "+y"`. If its paint material has an unusual name, add `"paint": "regex"`. The presets select models by stable `id`; traffic picks at random. If a selected model fails to load, its player preset uses its procedural body. `preservePaintMap: true` keeps neutralized paint textures when applying a car colour.
+
+## Verification
+
+Run `node --test tests/hdr.test.cjs` for the HDR sun-direction regression test. Serve the project and check all six garage presets and graphics quality levels for a rendering smoke test.

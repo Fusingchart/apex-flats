@@ -130,15 +130,15 @@ window.createPost = function (renderer, scene, camera) {
       c = toSRGB(max(c, 0.0));
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c *= mix(vec3(0.985, 0.995, 1.015), vec3(1.0), smoothstep(0.0, 0.5, l));
-      c *= mix(vec3(1.0), vec3(1.03, 1.005, 0.97), smoothstep(0.5, 1.0, l));
-      c = max(mix(vec3(l), c, 1.07), 0.0);
+      c *= mix(vec3(1.0), vec3(1.012, 1.003, 0.993), smoothstep(0.5, 1.0, l));
+      c = max(mix(vec3(l), c, 1.02), 0.0);
       c = clamp(c + (c - 0.5) * 0.04 * smoothstep(0.1, 0.6, c), 0.0, 1.0);
       // vignette
-      vec2 q = vUv - 0.5; c *= 1.0 - 0.28 * smoothstep(0.25, 0.85, dot(q, q) * 2.2);
+      vec2 q = vUv - 0.5; c *= 1.0 - 0.14 * smoothstep(0.25, 0.85, dot(q, q) * 2.2);
       // dither against banding in the sky
       c += (fract(sin(dot(gl_FragCoord.xy + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
       gl_FragColor = vec4(c, 1.0);
-    }`, { tColor: { value: null }, tAO: { value: null }, tBloom: { value: null }, exposure: { value: 1.0 }, bloom: { value: 0.05 }, aoAmt: { value: 0.85 }, time: { value: 0 }, res: { value: new THREE.Vector2() } });
+    }`, { tColor: { value: null }, tAO: { value: null }, tBloom: { value: null }, exposure: { value: 1.0 }, bloom: { value: 0.05 }, aoAmt: { value: 0.65 }, time: { value: 0 }, res: { value: new THREE.Vector2() } });
 
   let W = 4, H = 4, enabled = true, aoOn = true;
   function setSize(w, h) {
@@ -176,7 +176,7 @@ window.createPost = function (renderer, scene, camera) {
       renderer.autoClear = false; pass(upMat, bloomRT[i - 1]); renderer.autoClear = true;
     }
     // composite to the screen
-    finalMat.uniforms.tColor.value = sceneRT.texture; finalMat.uniforms.tAO.value = aoOn ? aoRT[0].texture : null; finalMat.uniforms.aoAmt.value = aoOn ? 0.85 : 0;
+    finalMat.uniforms.tColor.value = sceneRT.texture; finalMat.uniforms.tAO.value = aoOn ? aoRT[0].texture : null; finalMat.uniforms.aoAmt.value = aoOn ? 0.65 : 0;
     finalMat.uniforms.tBloom.value = bloomRT[0].texture; finalMat.uniforms.exposure.value = renderer.toneMappingExposure;
     finalMat.uniforms.time.value = (finalMat.uniforms.time.value + 1) % 1000;
     pass(finalMat, null);

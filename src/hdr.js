@@ -46,8 +46,8 @@ window.loadHDR = async function (url) {
   let best = -1, bi = 0;
   const px = new Float32Array(3);
   for (let y = H >> 1; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = (y * W + x) * 4; if (rgbe[i + 3] < best) continue;
-    decode(rgbe, i, px, 0); const l = px[0] + px[1] + px[2];
+    const i = (y * W + x) * 4; if (rgbe[i + 3] === 0) continue;
+    decode(rgbe, i, px, 0); const l = 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2];
     if (l > best) { best = l; bi = y * W + x; }
   }
   const sx = bi % W, sy = (bi / W) | 0;
@@ -72,7 +72,7 @@ window.loadHDR = async function (url) {
   // normalise: the upper hemisphere averages `target` (photos come at whatever exposure they were shot at)
   let sum = 0, cnt = 0;
   for (let y = EH >> 1; y < EH; y++) for (let x = 0; x < EW; x++) { const k = (y * EW + x) * 4; sum += 0.2126 * env[k] + 0.7152 * env[k + 1] + 0.0722 * env[k + 2]; cnt++; }
-  const gain = 0.3 / (sum / cnt);
+  const gain = 0.42 / Math.max(sum / cnt, 1e-6);
   for (let i = 0; i < env.length; i += 4) { env[i] *= gain; env[i + 1] *= gain; env[i + 2] *= gain; }
   const envTex = new THREE.DataTexture(env, EW, EH, THREE.RGBAFormat, THREE.FloatType);
   envTex.mapping = THREE.EquirectangularReflectionMapping; envTex.magFilter = THREE.LinearFilter; envTex.needsUpdate = true;

@@ -1,7 +1,6 @@
-// Real car model: "Car Concept" by Eric Chadwick / Darmstadt Graphics Group (CC-BY 4.0), a physically based glTF
-// sports car (clear-coat paint, glass, interior, separate wheels). Loaded once and turned into a template in this
-// game's car frame (x left, y up, z forward, wheels on y = 0, about 4.45 m long); every car (yours and the traffic)
-// is built from the template with its own paint and its own crumple-able copy of the body when it needs one.
+// Licensed glTF car templates from assets/cars/cars.json, normalized into the game's
+// frame (x left, y up, z forward). Body geometry is shared until deformation; each
+// vehicle gets independent paint and lamp materials, with wheels on their own axles.
 (function () {
 'use strict';
 
@@ -132,6 +131,8 @@ window.loadCarModel = async function (url, cfg = {}) {
     const spin = [], fixed = [];
     for (const o of parts) {
       const g = place(o).translate(-c.x, -c.y, -c.z), nm = (o.material.name || '') + ' ' + (o.name || '');
+      // Wheel materials use vertex colours too; glTF usually omits this attribute.
+      if (!g.hasAttribute('color')) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
       (/caliper|calliper|brake.?pad|brakepad/i.test(nm) || (/brake/i.test(nm) && !/disc|disk|rotor/i.test(nm)) ? fixed : spin).push({ geo: g, mat: fixMat(o.material) });
     }
     return { center: c, radius: r, spin, fixed };
@@ -140,7 +141,7 @@ window.loadCarModel = async function (url, cfg = {}) {
   for (const b of body) { b.geo.computeBoundingBox(); bb.union(b.geo.boundingBox); if (!/mirror/.test(b.special)) bbNoMirror.union(b.geo.boundingBox); }
   const top = bb.max.y;
   const axles = wheels ? { front: (wheels[0].center.z + wheels[1].center.z) / 2, rear: (wheels[2].center.z + wheels[3].center.z) / 2 } : null;
-  return { name: cfg.name || url, body, wheels, top, bodyHalfW: Math.max(-bbNoMirror.min.x, bbNoMirror.max.x), halfW: Math.max(-bb.min.x, bb.max.x), length: bb.max.z - bb.min.z, axles };
+  return { id: cfg.id, preservePaintMap: !!cfg.preservePaintMap, name: cfg.name || url, body, wheels, top, bodyHalfW: Math.max(-bbNoMirror.min.x, bbNoMirror.max.x), halfW: Math.max(-bb.min.x, bb.max.x), length: bb.max.z - bb.min.z, axles };
 };
 
 /**
@@ -152,11 +153,12 @@ window.buildModelCar = function (T, opts = {}) {
   const paint1 = opts.paint || [0.5, 0.02, 0.02], paint2 = opts.paint2 || [0.015, 0.015, 0.018];
   const matCache = new Map();
   const matFor = b => {
-    if (matCache.has(b.mat)) return matCache.get(b.mat);
+    const key = b.mat.uuid + '|' + b.special + '|' + b.paint;
+    if (matCache.has(key)) return matCache.get(key);
     let m = b.mat;
-    if (b.paint) { m = m.clone(); m.color.setRGB(...(b.paint === 1 ? paint1 : paint2)); if (m.map) { m.map = null; m.needsUpdate = true; } }
-    else if (b.special === 'head' || b.special === 'tail') { m = m.clone(); if (b.special === 'tail') { m.emissive = new THREE.Color('#ff1a0f'); m.emissiveIntensity = 0.8; } else { m.emissive = new THREE.Color('#fff4dc'); m.emissiveIntensity = 2.5; } }
-    matCache.set(b.mat, m);
+    if (b.paint) { m = m.clone(); m.color.setRGB(...(b.paint === 1 ? paint1 : paint2)); if (m.map && !T.preservePaintMap) { m.map = null; m.needsUpdate = true; } }
+    else if (b.special === 'head' || b.special === 'tail') { m = m.clone(); m.emissiveMap = m.map; if (b.special === 'tail') { m.emissive = new THREE.Color('#ff1a0f'); m.emissiveIntensity = 0.8; } else { m.emissive = new THREE.Color('#fff4dc'); m.emissiveIntensity = 2.5; } }
+    matCache.set(key, m);
     return m;
   };
   let tail = null; const heads = [];

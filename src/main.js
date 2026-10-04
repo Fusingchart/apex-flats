@@ -16,13 +16,13 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.95;
 
 // A sunny afternoon, lit by a real sky: a photographed HDR panorama (Poly Haven, CC0) is the visible sky, the
 // prefiltered environment for ambient light and reflections, and the source of the sun's direction and colour
 const scene = new THREE.Scene();
 const HAZE = new THREE.Color('#c9b9a4');
-scene.fog = new THREE.FogExp2(HAZE.clone(), 0.00024);
+scene.fog = new THREE.FogExp2(HAZE.clone(), 0.00018);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 7000);
 
 const SKY = await loadHDR('assets/sky/sky_4k.hdr');
@@ -35,7 +35,6 @@ const CARMODELS = [];
   const loaded = await Promise.all(list.map(e => loadCarModel('assets/cars/' + e.file, e).catch(err => { console.warn('car model failed:', e.file, err); return null; })));
   for (const m of loaded) if (m) CARMODELS.push(m);
 }
-const CARMODEL = CARMODELS[0] || null;
 // if the photo's sun sits very low, lift it a few degrees for gameplay so streets aren't all in shadow
 const sunDir = SKY.sunDir.clone();
 { const el = Math.asin(sunDir.y), lift = Math.max(el, 0.2), hz = Math.cos(lift) / Math.hypot(sunDir.x, sunDir.z); sunDir.set(sunDir.x * hz, Math.sin(lift), sunDir.z * hz).normalize(); }
@@ -73,14 +72,18 @@ const hazeAt = h => { // h: camera yaw
 };
 
 scene.add(new THREE.HemisphereLight('#c9d4e0', '#6b5a42', 0.12));
-const sun = new THREE.DirectionalLight(new THREE.Color().setRGB(...SKY.sunColor.map(v => 0.6 + 0.4 * Math.sqrt(v))).lerp(new THREE.Color(1, 0.93, 0.82), 0.4), 2.9); // the photo's sun disc clips to orange: soften it
+const sun = new THREE.DirectionalLight(new THREE.Color().setRGB(...SKY.sunColor.map(v => 0.6 + 0.4 * Math.sqrt(v))).lerp(new THREE.Color(1, 0.93, 0.82), 0.4), 2.6); // preserve detail on sunlit paint and concrete
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { left: -95, right: 95, top: 95, bottom: -95, near: 1, far: 600 });
-sun.shadow.bias = -0.0003;
-sun.shadow.normalBias = 0.04;
+sun.shadow.bias = -0.00008;
+sun.shadow.normalBias = 0.025;
 sun.shadow.radius = 2.5;
 scene.add(sun, sun.target);
+// Snap in the light's own image plane, using the active quality preset's texel size.
+const shadowRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize();
+const shadowUp = new THREE.Vector3().crossVectors(sunDir, shadowRight).normalize();
+const shadowFocus = new THREE.Vector3();
 
 function shadowed(m) { m.castShadow = true; m.receiveShadow = true; return m; }
 const solids = []; // {type: 'circle', x, z, r, h, y0?, mu} | {type: 'box', x, z, hx, hz, h, y0?, ux, uz, mu}
@@ -124,17 +127,17 @@ function nearSolids(x, z, r, out) {
 // Torque curves share one shape, scaled to each engine's peak torque and rev range
 const TORQUE_SHAPE = [[0, 0.42], [0.13, 0.54], [0.33, 0.78], [0.53, 0.94], [0.68, 1], [0.86, 0.93], [1, 0.8], [1.18, 0.47]];
 const PRESETS = [
-  { name: 'Apex GT', kind: 'Rear-drive GT', blurb: 'Low, wide, winged. Balanced and playful; steps out if you ask.', style: 'gt', paint: [0.012, 0.012, 0.014], paint2: [0.75, 0.75, 0.74], stripe: true, stripeColor: [0.82, 0.82, 0.8], wing: true,
+  { name: 'Apex GT', model: 'concept', kind: 'Rear-drive GT', blurb: 'Low, wide, winged. Balanced and playful; steps out if you ask.', style: 'gt', paint: [0.012, 0.012, 0.014], paint2: [0.75, 0.75, 0.74], stripe: true, stripeColor: [0.82, 0.82, 0.8], wing: true,
     drive: 'rwd', mass: 1250, inertia: 1850, cg: 0.5, peak: 425, redline: 7600, idle: 900, gears: [3.45, 2.35, 1.72, 1.33, 1.07, 0.86], diff: 3.9, grip: 1.08, brake: 13000, drag: 0.43, steer: 0.6, assist: 0.4 },
-  { name: 'Commuter', kind: 'Front-drive sedan', blurb: 'Soft, safe, understeers when pushed.', style: 'sedan', paint: [0.66, 0.67, 0.68], stripe: false, wing: false,
+  { name: 'Commuter', model: 'sedan', kind: 'Front-drive sedan', blurb: 'Soft, safe, understeers when pushed.', style: 'sedan', paint: [0.66, 0.67, 0.68], stripe: false, wing: false,
     drive: 'fwd', mass: 1400, inertia: 2150, cg: 0.53, peak: 260, redline: 6500, idle: 800, gears: [3.6, 2.1, 1.4, 1.03, 0.8, 0.66], diff: 3.8, grip: 1.0, brake: 12000, drag: 0.36, steer: 0.62, assist: 0.65 },
-  { name: 'Hot Hatch', kind: 'Front-drive hatchback', blurb: 'Light, eager, lifts a rear wheel in corners.', style: 'hatch', paint: [0.62, 0.06, 0.05], stripe: true, wing: false,
+  { name: 'Hot Hatch', model: 'hatchback', kind: 'Front-drive hatchback', blurb: 'Light, eager, lifts a rear wheel in corners.', style: 'hatch', paint: [0.62, 0.06, 0.05], stripe: true, wing: false,
     drive: 'fwd', mass: 1290, inertia: 1750, cg: 0.5, peak: 380, redline: 7000, idle: 850, gears: [3.4, 2.2, 1.6, 1.25, 1.0, 0.82], diff: 4.1, grip: 1.12, brake: 13500, drag: 0.4, steer: 0.62, assist: 0.55 },
-  { name: 'Summit', kind: 'All-wheel-drive SUV', blurb: 'Heavy and tall. Grips everywhere, leans a lot.', style: 'suv', paint: [0.16, 0.24, 0.18], stripe: false, wing: false,
+  { name: 'Summit', model: 'suv', kind: 'All-wheel-drive SUV', blurb: 'Heavy and tall. Grips everywhere, leans a lot.', style: 'suv', paint: [0.16, 0.24, 0.18], stripe: false, wing: false,
     drive: 'awd', mass: 1950, inertia: 3200, cg: 0.7, peak: 540, redline: 6200, idle: 750, gears: [3.8, 2.3, 1.55, 1.15, 0.9, 0.72], diff: 3.7, grip: 1.0, brake: 15000, drag: 0.5, steer: 0.58, wheel: 0.36, assist: 0.65 },
-  { name: 'Torque V8', kind: 'Rear-drive muscle', blurb: 'Huge low-down shove. Smoke on demand.', style: 'coupe', paint: [0.32, 0.04, 0.05], stripe: true, wing: false,
+  { name: 'Torque V8', model: 'coupe', kind: 'Rear-drive muscle', blurb: 'Huge low-down shove. Smoke on demand.', style: 'coupe', paint: [0.32, 0.04, 0.05], stripe: true, wing: false,
     drive: 'rwd', mass: 1720, inertia: 2600, cg: 0.52, peak: 680, redline: 6400, idle: 700, gears: [2.9, 1.95, 1.45, 1.12, 0.9, 0.72], diff: 3.6, grip: 1.05, brake: 15000, drag: 0.44, steer: 0.58, assist: 0.32 },
-  { name: 'Vortex', kind: 'All-wheel-drive supercar', blurb: 'Brutal launch, huge grip, 300+ km/h.', style: 'coupe', paint: [0.03, 0.03, 0.035], stripe: true, wing: true,
+  { name: 'Vortex', model: 'concept', kind: 'All-wheel-drive supercar', blurb: 'Brutal launch, huge grip, 300+ km/h.', style: 'coupe', paint: [0.03, 0.03, 0.035], stripe: true, wing: true,
     drive: 'awd', mass: 1480, inertia: 2000, cg: 0.45, peak: 760, redline: 8600, idle: 1000, gears: [3.3, 2.35, 1.8, 1.42, 1.15, 0.94], diff: 3.6, grip: 1.25, brake: 17000, drag: 0.36, steer: 0.6, assist: 0.55 },
 ];
 const SPLIT = { rwd: [0, 1], fwd: [1, 0], awd: [0.42, 0.58] };
@@ -163,8 +166,8 @@ scene.add(carGroup);
 /* ---------------- Soft-body structure ---------------- */
 // Lattice: 5 across x 4 high x 10 long. The bottom-middle nodes under the cabin are the rigid chassis.
 // Beams through the passenger cell are ~3x stronger than the crumple zones; floor rails are stiffer still.
-const softConfig = top => ({
-  min: [-0.9, 0.2, -2.22], max: [0.9, top, 2.22], dims: [5, 4, 10],
+const softConfig = (top, halfW = 0.9, length = 4.44) => ({
+  min: [-halfW, 0.2, -length / 2], max: [halfW, top, length / 2], dims: [5, 4, 10],
   nodeMass: 4, axial: 2.6e5, yieldForce: 8000, minRatio: 0.3, tearStrain: 0.6, nodeRadius: 0.07, iterations: 3, ...(window.TUNE || {}),
   pinned: (i, j, k) => j === 0 && i >= 1 && i <= 3 && k >= 3 && k <= 6,
   // [min z, max z, min |x|]: the engine bay and boot fold up against the cell, doors stop at the seats
@@ -240,11 +243,12 @@ function buildPlayer(pr) {
   if (typeof flying !== 'undefined') { for (const f of flying) scene.remove(f.m); flying.length = 0; }
   P = physicsOf(pr); L = P.a + P.b;
   TORQUE = TORQUE_SHAPE.map(([r, t]) => [r * pr.redline, t * pr.peak]);
-  const model = CARMODELS.length ? CARMODELS[(pr.model ?? PRESETS.indexOf(pr)) % CARMODELS.length] : null;
+  const model = CARMODELS.find(m => m.id === pr.model) || null;
   kit = model ? buildModelCar(model, { paint: pr.paint, paint2: pr.paint2, ownGeometry: true })
     : buildCarBody({ style: pr.style, paint: pr.paint, stripe: pr.stripe, stripeColor: pr.stripeColor, wing: pr.wing });
+  if (model && model.wheels) P.R = model.wheels.reduce((sum, w) => sum + w.radius, 0) / 4;
   if (kit.axles) { P.a = kit.axles.front; P.b = -kit.axles.rear; L = P.a + P.b; } // the model's own wheelbase
-  soft = new SoftBody(softConfig(kit.top));
+  soft = new SoftBody(softConfig(kit.top, kit.bodyHalfW, kit.length));
   tailMat = kit.mats.tail; bindingOf = new Map();
   bindings = kit.meshes.map(({ mesh, opts }) => { body.add(mesh); const bd = soft.bind(mesh.geometry, opts || { wrinkle: 0 }); bindingOf.set(mesh, bd); return bd; });
   if (kit.model && kit.makeWheel) {
@@ -1323,10 +1327,13 @@ function syncCar(dt) {
   if (car.onSand && Math.hypot(car.vx, car.vz) > 6 && rand() < 0.5) { const [x, z] = wheelPos(rand() < 0.5 ? 0.82 : -0.82, -P.b); puff(x, z, 0.3, true, car.y + 0.35, car.surface === 'water' ? '#e8eef2' : '#8c7a5c'); }
 
   // the shadow box follows the view: centred a little ahead of the car, snapped to texels so edges don't crawl
-  const ahead = 40, cx = car.x + Math.sin(car.h) * ahead, cz = car.z + Math.cos(car.h) * ahead, tex = 190 / 4096;
-  const sx = Math.round(cx / tex) * tex, sz = Math.round(cz / tex) * tex;
-  sun.position.set(sx + sunDir.x * 300, car.y + sunDir.y * 300, sz + sunDir.z * 300);
-  sun.target.position.set(sx, car.y, sz);
+  const ahead = 40, tex = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  shadowFocus.set(car.x + Math.sin(car.h) * ahead, car.y, car.z + Math.cos(car.h) * ahead);
+  const lightX = shadowFocus.dot(shadowRight), lightY = shadowFocus.dot(shadowUp);
+  shadowFocus.addScaledVector(shadowRight, Math.round(lightX / tex) * tex - lightX);
+  shadowFocus.addScaledVector(shadowUp, Math.round(lightY / tex) * tex - lightY);
+  sun.target.position.copy(shadowFocus);
+  sun.position.copy(shadowFocus).addScaledVector(sunDir, 300);
   sky.position.copy(camera.position);
   { const hz = hazeAt(Math.atan2(camLook.x - camera.position.x, camLook.z - camera.position.z)); scene.fog.color.setRGB(hz[0], hz[1], hz[2]); }
 }
@@ -1410,7 +1417,7 @@ renderCards(el('start-cards'), pr => { chooseCar(pr); start(); });
 const STEP = 1 / 240;
 let acc = 0, last = performance.now(), frameAvg = 16, dprTimer = 0, cullTick = 0;
 function frame(now) {
-  const real = Math.min(0.1, (now - last) / 1000); last = now;
+  const real = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
   // Adaptive resolution: hold ~60 fps by trading pixels, never simulation time
   frameAvg = lerp(frameAvg, real * 1000, 0.05); dprTimer += real;
   if (dprTimer > 1.5) {
@@ -1433,11 +1440,11 @@ function frame(now) {
   post.render(dt);
   requestAnimationFrame(frame);
 }
-camPos.set(car.x - Math.sin(car.h) * 7, 3, car.z - Math.cos(car.h) * 7);
-camera.position.copy(camPos);
+camSnap = true;
+updateCamera(0);
 requestAnimationFrame(frame);
 applyDamage();
-window.apex = { grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
+window.apex = { carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
   addSolid, view(mode, angle, radius = 11) { camMode = camModes.indexOf(mode); camSnap = true; orbitR = radius; if (angle !== undefined) { orbitA = angle; orbitHold = true; } } };
 el('loading').hidden = true;
 }

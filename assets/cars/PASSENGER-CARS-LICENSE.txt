@@ -1,0 +1,34 @@
+THIRD-PARTY ASSET ATTRIBUTION
+================================
+
+This project contains 3D models from the "Generic passenger car pack" by Comrade1280,
+originally published on Sketchfab and used under the Creative Commons Attribution 4.0 License.
+
+Original Asset Information:
+- Title: Generic passenger car pack
+- Author: Comrade1280
+- Source: https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5
+- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- Published: August 15th, 2017
+
+Creative Commons Attribution 4.0 International License
+=====================================================
+
+You are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material for any purpose, even commercially.
+
+Under the following terms:
+- Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+
+No additional restrictions — You may not apply legal terms or technological measures that legally restrict others from doing anything the license permits.
+
+For the full license text, see: https://creativecommons.org/licenses/by/4.0/
+
+Attribution Notice:
+"Generic passenger car pack" by Comrade1280 (https://sketchfab.com/comrade1280) is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+Modified for use in this Unity project:
+- Imported to Unity and configured as prefabs
+- Applied custom materials and textures
+- Integrated with custom scripts for vehicle simulation
