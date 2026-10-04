@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Apex Flats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="src/style.css?v=26">
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="brand" class="hud panel">
+  <h1>Apex <span>Flats</span></h1>
+  <div id="keys">
+    <b>W / ↑</b><span>Throttle</span>
+    <b>S / ↓</b><span>Brake · hold to reverse</span>
+    <b>A D / ← →</b><span>Steer</span>
+    <b>Space</b><span>Handbrake</span>
+    <b>Q / E</b><span>Shift down / up (manual)</span>
+    <b>T</b><span>Back to automatic</span>
+    <b>C</b><span>Camera</span>
+    <b>V</b><span>Garage: change car</span>
+    <b>Tab</b><span>Full map</span>
+    <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
+    <b>Z</b><span>Slow motion</span>
+    <b>M</b><span>Mute</span>
+    <b>G</b><span>Graphics quality (low / medium / high)</span>
+    <b>H</b><span>Hide this panel</span>
+  </div>
+</div>
+
+<div id="drift">DRIFT 0°</div>
+<div id="impact"></div>
+<div id="wanted" class="hud"><div id="stars"></div><div id="bounty"></div></div>
+<div id="copmsg"></div>
+<canvas id="map" class="hud" width="340" height="340" aria-label="Minimap"></canvas>
+
+<div id="left" class="hud">
+  <div id="damage" class="panel">
+    <canvas id="dmg" width="180" height="260" aria-label="Top-down damage map"></canvas>
+    <div id="lost">No parts lost</div>
+  </div>
+  <dl id="telemetry" class="panel">
+    <dt>Engine</dt><dd id="t-rpm">900 rpm</dd>
+    <dt>Power</dt><dd id="t-kw">0 kW</dd>
+    <dt>Lat g</dt><dd id="t-g">0.00</dd>
+    <dt>Slip</dt><dd id="t-slip">0.0°</dd>
+    <dt>Body</dt><dd id="t-body">0% damage</dd>
+    <dt>Motor</dt><dd id="t-engine">100% power</dd>
+    <dt>Surface</dt><dd id="t-surf">Asphalt</dd>
+    <dt>Traffic</dt><dd id="t-traffic">0 cars nearby</dd>
+    <dt>Camera</dt><dd id="t-cam">Chase</dd>
+  </dl>
+</div>
+
+<div id="cluster" class="hud">
+  <canvas id="tach" width="480" height="480"></canvas>
+  <div id="readout">
+    <div id="speed">0</div>
+    <div id="unit">km/h</div>
+    <div id="gear">1</div>
+    <div id="gearmode">AUTO</div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="grp"><button id="tl" aria-label="Steer left">◀</button><button id="tr" aria-label="Steer right">▶</button></div>
+  <div class="grp"><button id="tb" aria-label="Brake">BRK</button><button id="th" aria-label="Handbrake">HB</button><button id="tg" aria-label="Throttle">GAS</button></div>
+</div>
+
+<div id="start">
+  <div class="intro">
+    <h2>Apex <span>Flats</span></h2>
+    <p>Ashby Valley at dusk: a river city with a downtown, suburbs and an industrial south bank, villages in the hills, mountain roads and a freeway across it all. Traffic follows the rules. Pick a car to start.</p>
+    <p id="loading" class="hint">Building the valley…</p>
+    <div id="start-cards" class="cards"></div>
+    <p class="hint">Click a car, or press 1–6. Press V in game to swap.</p>
+  </div>
+</div>
+
+<div id="garage" class="overlay" hidden>
+  <div class="intro">
+    <h2>Garage</h2>
+    <div id="garage-cards" class="cards"></div>
+    <p class="hint">Press 1–6 to choose, Esc to close. The new car starts where you are.</p>
+  </div>
+</div>
+
+<canvas id="bigmap" width="1100" height="1100" hidden aria-label="Full map"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>THREE.ColorManagement.legacyMode = false; // hex colours are sRGB and get converted to linear</script>
+<script src="src/hdr.js?v=26"></script>
+<script src="src/grass.js?v=26"></script>
+<script src="src/post.js?v=26"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="src/carmodel.js?v=26"></script>
+<script src="src/softbody.js?v=26"></script>
+<script src="src/carmesh.js?v=26"></script>
+<script src="src/city.js?v=26"></script>
+<script src="src/traffic.js?v=26"></script>
+<script src="src/police.js?v=26"></script>
+<script src="src/main.js?v=26"></script>
+</body>
+</html>

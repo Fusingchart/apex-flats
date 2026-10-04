@@ -1,0 +1,190 @@
+# Apex Flats
+
+A 3D driving game in the browser, built with Three.js. You drive a city on a hazy afternoon: a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can pick from six cars.
+
+## Run it
+
+Open `index.html` in a browser, or serve the folder:
+
+```bash
+npx serve .
+```
+
+Three.js and the fonts load from a CDN, so the first load needs an internet connection.
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| W / ↑ | Throttle |
+| S / ↓ | Brake, hold at a standstill to reverse |
+| A D / ← → | Steer |
+| Space | Handbrake |
+| Q / E | Shift down / up (switches to manual) |
+| T | Back to automatic |
+| C | Cycle camera |
+| V | Garage: change car (1–6 to choose) |
+| Tab | Full map |
+| R / Shift+R | Repair and drop back onto the nearest lane (Shift also tidies up knocked-over props) |
+| Z | Slow motion (¼ speed) |
+| M | Mute |
+| G | Graphics quality (low / medium / high) |
+| H | Hide the controls panel |
+
+Gamepads work (left stick, triggers, A for handbrake), and phones get on-screen buttons.
+
+## The cars
+
+| Car | Drive | Power | Weight | 0–100 km/h |
+| --- | --- | --- | --- | --- |
+| Apex GT | Rear | ~360 hp | 1250 kg | 5.6 s |
+| Commuter | Front | ~190 hp | 1400 kg | 8.9 s |
+| Hot Hatch | Front | ~300 hp | 1290 kg | 8.4 s |
+| Summit (SUV) | All | ~375 hp | 1950 kg | 5.2 s |
+| Torque V8 | Rear | ~490 hp | 1720 kg | 5.4 s |
+| Vortex | All | ~735 hp | 1480 kg | 2.8 s |
+
+Each has its own body style, gearing, torque curve, grip, brakes and centre of gravity. The tyre model works per wheel. Loads shift front to back under braking and acceleration, and side to side in corners, shared between the axles by roll stiffness. Tyres lose efficiency as load rises, slip angles build up over a short distance of rolling, and each wheel gets its own share of drive, brakes and handbrake. Peak lateral grip is about 1.0–1.15 g for the road cars and 1.27 g for the Vortex. A stability assist steers the car where you point it and catches slides. It mostly lets go just after a handbrake pull, or when you hold full throttle and steer into the slide, so you can still drift. It's lightest on the rear-drive cars. Steering into a slide always gets enough lock to catch it, the cars gain a little downforce at speed, and traction control stops wheelspin on launch. Front-drive cars spin their front wheels and understeer under power; rear-drive cars oversteer; all-wheel drive splits the torque 42/58. All of them stop from 100 km/h in about 40 m.
+
+## The world
+
+A 3.5 km square, generated at load (about half a second):
+
+- **Downtown** (the middle 600 m): towers of three height classes, every junction signalised.
+- **Suburbs**: a 15 × 15 grid of junctions 150 m apart. Arterials every 450 m (50 km/h, painted lines), residential streets between (40 km/h), some with S-bends, some links missing for T-junctions. About 2,200 houses with garages, driveways and lit windows, plus parks, street trees, street lights, mailboxes and bins (knockable).
+- **Ring freeway**: a rounded square 2.6 km across, two lanes each way at 100 km/h, a concrete median and median lights. At eight **diamond interchanges** the freeway climbs onto a 7.5 m bridge over the crossing road. Off-ramps leave from the right lane; on-ramps feed a 180 m acceleration lane. Ramps meet the crossing road at signalised junctions, and each exit has a sign 400 m ahead.
+- **Countryside**: a 70 km/h rural loop around everything, woods and open fields.
+
+Junctions are run by traffic lights (16 s green, 3.5 s yellow, 1.5 s all-red), two-way stops (side streets stop for arterials) and all-way stops (between residential streets). Grass has less grip than asphalt. The minimap turns with your car; Tab shows the whole map.
+
+## AI traffic
+
+Traffic exists around you, not everywhere. A pool of 44 cars spawns out of sight 130–460 m away, in proportion to how busy each road is. It's densest downtown and on the freeway and light in the suburbs, so the count near you ranges from about 20 to 40. Cars more than about 520 m away are recycled.
+
+Each AI car runs a front-wheel-drive version of the player's tyre model and has its own crash structure. Each driver:
+
+- **Plans routes** to random destinations with Dijkstra and picks a new one before arriving.
+- **Steers** by pure pursuit on the lane centre, with speed-scaled look-ahead and a little personal wander.
+- **Controls speed** with the Intelligent Driver Model, capped by the speed limit and by comfortable lateral g in curves, braking early enough to arrive at the right speed.
+- **Handles junctions**: full stops at stop signs (first-come first-served at all-way stops), Highway Capacity Manual critical gaps at two-way stops (left 7.1 s, straight 6.5 s, right 6.2 s), a yellow-light stop/go decision, left turns that yield, and no entering a junction while someone is on a crossing or merging path.
+- **Drives the freeway**: keeps right, overtakes slower cars, merges off the acceleration lane when there's a safe gap, and moves right well before its exit (or skips the exit if it can't).
+- **Uses the pedals like a person**, with rate-limited throttle and brake.
+- **Has a temperament**: desired speed, headway, acceleration, braking, patience and gap acceptance vary per driver.
+- **Shows it**: indicators, brake lights, a horn if you block them, hazards after a crash.
+
+You hear the three nearest engines, with Doppler shift as they pass.
+
+Measured in headless runs: no AI-to-AI contact and no stop signs or red lights run across downtown (90 s), the suburbs (120 s) and around two interchanges (90 s and 150 s), with about 500 junction crossings in total. On the freeway, cars average about 90 km/h, with roughly 25 lane changes and 16 exits per 90–150 s window near an interchange. All the traffic physics costs about 0.1–0.3 ms per 240 Hz step.
+
+## Police
+
+Patrol cars (black and white, light bar) drive in the normal traffic. If one can see you (within range, no building in the way), these are offences:
+
+| Offence | Wanted | Bounty |
+| --- | --- | --- |
+| Speeding (about 30% over the limit) | ★ | $200 + |
+| Driving on the pavement or grass at speed | ★ | $300 |
+| Wrong-way driving (freeway: ★★) | ★ | $300 / $900 |
+| Hitting another car | ★ | $400 + |
+| Ramming a police car (always counts) | ★★ | $1,500 |
+
+While you're wanted, the stars and bounty show under the minimap and the siren gets louder as units close in. Reinforcements spawn out of sight, already heading your way, up to the number set by your level (2, 3, 4, 6 or 8 cars). Each unit has a job:
+
+- **Chase** units sit on your tail and go for a PIT on your rear corner.
+- **Flank** units pull alongside and shove you sideways.
+- **Intercept** units drive to where you'll be in a few seconds and turn across your path.
+
+They route through the street network until they can see you, then come straight at you. They overtake through the oncoming lane when it's clear, brake for cross traffic, steer round walls, and reverse out of jams. Units stuck somewhere you can't see are quietly replaced. From three stars, roadblocks of two cruisers go up across the road ahead; from four, a helicopter circles overhead and keeps you in its searchlight unless something is over your head. Civilian drivers pull over for sirens, and brake, swerve and honk when you come at them fast. Staying in view raises your level every 40 s, and wrecking two cruisers raises it by one. Your bounty grows the whole time.
+
+To escape, break line of sight and keep every unit more than 60 m away until the stars stop flashing (13 s at one star, plus 4 s per extra star). The bounty stays on your head and fades slowly; above $1,500, any cop who gets a good look at you will start a chase. If you stop with a cruiser alongside for 3 s, you're busted: you pay the bounty and start again on the nearest road.
+
+## Crash model
+
+The car body is a lattice of 200 nodes (5 across, 4 high, 10 long) joined by about 1,700 beams, solved with XPBD at up to 2,400 Hz during contact.
+
+- **Plastic steel.** Beams yield past a strain limit and keep their new length, so dents are permanent. Overstretched beams tear.
+- **Crumple zones.** The passenger cell is about 3× stronger than the engine bay and boot; floor rails are stiffer again; door skins are weaker than pillars.
+- **Two-way coupling.** The force obstacles exert on the contacting nodes decelerates and spins the car; in car-to-car hits the other car gets the equal and opposite push. Springback returns only a small share of the energy.
+- **Rendering.** The visible body is bound to the lattice by free-form deformation: panels wrinkle where crushed, paint flakes and scuffs, glass crazes.
+- **Consequences.** Bent wheels pull and lose grip, a crushed engine bay cuts power and steams then smokes, parts tear off, lights go dark.
+
+A 71 km/h hit on a downtown tower peaks at about 25 g and leaves the engine at 25% power.
+
+## Rendering
+
+The scene renders into a half-float, 4× multisampled HDR buffer and then goes through:
+
+- **Ambient occlusion** from the depth buffer, at half resolution: 12 samples and a depth-aware blur. It darkens corners, kerbs, building bases and the ground under cars.
+- **Bloom** from a five-level mip chain of the brightest pixels: sun glints, lamps, brake lights, sirens.
+- **Final pass:** ACES filmic tone mapping, then a grade in display space (cooler shadows, warmer highlights, a little more contrast and colour), vignette and dithering.
+
+Lighting comes from the sun (soft 4096² shadow map that follows the car) plus a prefiltered sky environment map, which also gives the reflections on glass, clear-coated paint and water.
+
+Cars use smooth lofted bodies with clear-coat paint, glossy glass, panel shut lines, a grille and black sills drawn by the shader from each vertex's undeformed position, so the details follow dents. Wheels have rounded tyres with tread, five-spoke alloys, brake discs and callipers.
+
+Press **G** to cycle graphics quality:
+
+| Preset | Resolution cap | Shadow map | Ambient occlusion | Bloom |
+| --- | --- | --- | --- | --- |
+| Low | 1× | 1024² | off | off |
+| Medium | 1.25× | 2048² | on | on |
+| High | 1.5× | 4096² | on | on |
+
+If the adaptive resolution has already dropped to its floor and the frame rate still can't be held, the game steps down a preset by itself.
+
+## Performance
+
+Static scenery is instanced in 400 m chunks with real bounding spheres, so whole chunks are culled, and each kind of object has a view distance (mailboxes about 200 m, towers always). Chunk meshes are static, so their matrices aren't recomputed every frame.
+
+- **Distant buildings:** beyond about 620 m, a chunk's buildings swap to a single merged, vertex-coloured mesh with windows and storeys sketched by the shader, replacing around 20 instanced draws.
+- **Distant trees:** beyond 300 m, crowns and firs swap to one indexed low-poly mesh per chunk.
+- **Distant traffic:** cars beyond 140 m are drawn together as one instanced stand-in.
+- **Terrain:** distant terrain uses 1 km tiles.
+- **Shadows:** only chunks near the car cast shadows.
+
+Together these took a typical downtown frame from about 1,540 draw calls and 3.6M triangles to about 730 calls and 2.3M triangles. Signal lamps share one instanced mesh. Traffic cars are about 10 draw calls each. Resolution adapts between 0.6× and 1.5× to hold about 60 fps. A slow frame never slows down the simulation.
+
+## Layout
+
+- `index.html` — page, HUD, car picker, garage and map markup
+- `src/style.css` — HUD and overlay styles
+- `src/post.js` — HDR post-processing: ambient occlusion, bloom, tone mapping and grade
+- `src/softbody.js` — the lattice solver and free-form deformation
+- `src/carmesh.js` — lofted car bodies (coupe, sedan, hatch, SUV) and bolt-on parts
+- `src/city.js` — the world: road graph, lanes, freeway and ramps, junction control, signals, height field, scenery
+- `src/traffic.js` — AI vehicles: spawning, dynamics, the driver model, collisions and police pursuit driving
+- `src/police.js` — offences, wanted level, bounty, evasion and busting, the HUD stars and the siren
+- `src/main.js` — scene, player physics, car presets, collisions, damage, audio, input, camera, HUD and loop
+
+Car tuning lives in `PRESETS` in `src/main.js`. Traffic density is `DENSITY` in `src/city.js`; the pool size is `max` in the `createTraffic` call. In the browser console, `apex.car`, `apex.crash` and `apex.traffic.vehicles` show live state, and `apex.chooseCar(apex.PRESETS[n])` swaps cars.
+
+## Assets
+
+All photographic assets are CC0 (public domain) from [Poly Haven](https://polyhaven.com) and live in `assets/`:
+
+- **Sky:** the HDR panorama *Kloofendal 48d Partly Cloudy (Pure Sky)*, a sunny afternoon with the sun 47° up. It is the visible sky and the lighting environment, and the sun's direction and colour are read from it.
+- **Ground:** *Aerial Asphalt 01* (roads), *Concrete Pavement* (pavements), *Aerial Grass Rock* (open ground). Each has colour, normal and roughness maps, tiled in world space.
+- **Buildings:** *Red Brick 03*, *Beige Wall 001*, *Exterior Wall Cladding 03* (house siding), *Concrete Wall 008*, *Corrugated Iron 02*, *Grey Roof 01* (shingles) and *Gravel* (flat roofs), with colour and normal maps. Walls are mapped in metres along each face, and ledges and roofs use triplanar projection.
+- **Foliage:** the leaf atlas from *Jacaranda Tree*, the bark from the same tree, and the blade atlas from *Grass Medium 02*. Trees are built from alpha-cut cards of these. Conifer branches and hedges are drawn in code.
+
+Grass is two instanced layers that follow the camera: dense clumps to about 50 m and bigger clumps out to about 160 m. Both sway in the wind and stay a metre clear of roads and paths.
+
+### Cars
+
+Cars are real glTF models, listed in `assets/cars/cars.json`. Every car is built from these models, yours and the traffic, each with its own paint. A car gets its own copy of the body to crumple the first time it's hit.
+
+- **Car Concept** by Eric Chadwick, © 2024 Darmstadt Graphics Group GmbH, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) ([KhronosGroup/glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept)), based on a public-domain model by Unity Fan.
+
+**Adding a car:** put the `.glb` in `assets/cars/` and add a line to `cars.json`:
+
+```json
+{ "file": "my-car.glb", "name": "My Car", "length": 4.6, "credit": "…" }
+```
+
+The loader works most things out from the model:
+
+- which way is front (the headlights) and which way is up (the roof)
+- the four wheels (objects named wheel, tyre or rim, sorted by corner)
+- the paint (materials named paint, body or exterior), glass, head and tail lights, and mirrors
+
+If a model points the wrong way, add `"forward": "-z"` (or `+x`, `-y` and so on) and `"up": "+y"`. If its paint material has an unusual name, add `"paint": "regex"`. Your six cars use the models in list order; traffic picks at random.
