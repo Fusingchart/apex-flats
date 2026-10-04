@@ -108,9 +108,21 @@ window.createTraffic = function (ctx) {
     g.computeVertexNormals();
     return g;
   })();
+  const driverCloth = new THREE.MeshStandardMaterial({ color: '#333945', roughness: 0.88 });
+  const driverPolice = new THREE.MeshStandardMaterial({ color: '#1d2d46', roughness: 0.86 });
+  const driverSkin = new THREE.MeshStandardMaterial({ color: '#b88769', roughness: 0.9 });
+  const driverHair = new THREE.MeshStandardMaterial({ color: '#211a16', roughness: 0.95 });
+  function makeDriver(police) {
+    const g = new THREE.Group(), shirt = police ? driverPolice : driverCloth;
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.25, 3, 7), shirt); torso.position.set(0, 0.7, 0.12); g.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 10, 8), driverSkin); head.position.set(0, 0.97, 0.15); g.add(head);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.119, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.58), driverHair); hair.position.set(0, 1.005, 0.145); g.add(hair);
+    g.position.set(0.31, 0, 0.18); g.userData.police = police;
+    return g;
+  }
   const wheelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 });
   const vehicles = [];
-  const playerBox = { type: 'box', hx: 0.95, hz: 2.26, h: 1.5, mu: 0.5, isPlayer: true, body: player };
+  const playerBox = { type: 'box', hx: 0.95, hz: 2.26, r: 0.38, h: 1.5, mu: 0.5, isPlayer: true, body: player };
   let now = 0;
 
   /* ---------------- Pool ---------------- */
@@ -119,9 +131,10 @@ window.createTraffic = function (ctx) {
     const paint = police ? [0.012, 0.013, 0.016] : COLORS[(rand() * COLORS.length) | 0];
     // the real car model when it's loaded (shared geometry until the car is first dented), else a built body
     const accent = police ? [0.85, 0.85, 0.85] : rand() < 0.6 ? [0.012, 0.012, 0.014] : paint.map(c => c * 0.35);
-    const carModel = carModels.length ? carModels[(rand() * carModels.length) | 0] : null;
+    const carModel = carModels.length ? (ctx.pickModel?.(rand) || carModels[(rand() * carModels.length) | 0]) : null;
     const kit = carModel ? buildModelCar(carModel, { paint, paint2: accent }) : buildCarBody({ style, paint, lite: true });
     const group = new THREE.Group(), body = new THREE.Group(); group.add(body); scene.add(group);
+    const driverMesh = makeDriver(police); body.add(driverMesh);
     group.rotation.order = 'YXZ'; group.visible = false;
     const soft = new SoftBody(softConfig(kit.top, kit.bodyHalfW, kit.length));
     const bindings = new Map(), lazy = [];
@@ -141,13 +154,16 @@ window.createTraffic = function (ctx) {
       bias: (rand() - 0.5) * 0.3, wander: rand() * TAU, wanderRate: lerp(0.4, 0.8, rand()), overtake: lerp(1.5, 4, calm),
     };
     const v = {
-      id, style, kit, group, body, soft, bindings, lazy: lazy.length ? lazy : null, dented: false, wheels, drv, paint,
+      id, style, modelId: carModel?.id || null, kit, group, body, driverMesh, soft, bindings, lazy: lazy.length ? lazy : null, dented: false, wheels, drv, paint,
       m: spec.mass, I: spec.I, cg: spec.cg, power: spec.power, a: kit.axles ? kit.axles.front : 1.25, b: kit.axles ? -kit.axles.rear : 1.35,
       x: 1e6, y: 0, z: 1e6, h: 0, vx: 0, vz: 0, w: 0, px: 1e6, pz: 1e6, ph: 0, steer: 0, ax: 0, ay: 0, slope: 0,
       throttle: 0, brake: 0, aDes: 0, gear: 1, rpm: 800, frontRot: 0, pitch: 0, pitchV: 0, roll: 0, rollV: 0,
       state: 'idle', hitDv: 0, crashDv: 0, crashT: 0, signal: 0, hazard: false, horn: 0, stillT: 0,
       box: { type: 'box', hx: kit.bodyHalfW || 0.95, hz: kit.length ? kit.length / 2 : 2.26, h: kit.top, mu: 0.5, y0: 0, x: 1e6, z: 1e6, ux: 1, uz: 0 }, pool: [],
     };
+    group.userData.vehicle = v;
+    driverMesh.userData.vehicle = v;
+    driverMesh.traverse(m => { m.userData.vehicle = v; });
     v.box.body = v;
     if (police) dressPolice(v);
     return v;
@@ -302,6 +318,9 @@ window.createTraffic = function (ctx) {
     Object.assign(v, { state: 'drive', x: a.x, y: a.y || 0, z: a.z, h: Math.atan2(b.x - a.x, b.z - a.z), w: 0, steer: 0, ax: 0, ay: 0,
       hitDv: 0, crashDv: 0, hazard: false, signal: 0, cleared: null, waiting: null, commit: null, leader: null, leaderGap: Infinity,
       stillT: 0, lcEnd: 0, lcCool: now + 2, throttle: 0.2, brake: 0, ignore: null, blockedBy: null, slope: 0 });
+    v.driverMesh.visible = true; v.crimeTaken = false;
+    // chase bookkeeping from this car's last life (pooled): start clean
+    v.prog = null; v.progAt = 0; v.slowT = 0; v.farT = 0; v.deployed = false; v.struckT = -99; v.badT = 0; v.progT = 0; v.progPos = null;
     v.px = v.x; v.pz = v.z; v.ph = v.h;
     const sp = L.speed * 0.85;
     v.vx = Math.sin(v.h) * sp; v.vz = Math.cos(v.h) * sp;
@@ -716,11 +735,11 @@ window.createTraffic = function (ctx) {
     if (v.progT > 1.8) {
       const moved = v.progPos ? Math.hypot(v.x - v.progPos.x, v.z - v.progPos.z) : 99;
       v.progPos = { x: v.x, z: v.z }; v.progT = 0;
-      if (moved < 4 && d > 10 && v.chaseT > 3 && v.aDes > 0.5) { v.rev = 2.2; v.path = null; v.revSide = probe(v, 0.6, 12) > probe(v, -0.6, 12) ? 1 : -1; return; }
+      if (moved < 3 && d > 10 && v.chaseT > 2.5 && (v.aDes > 0.5 || sp < 1)) { v.rev = 2.2; v.path = null; v.revSide = probe(v, 0.6, 12) > probe(v, -0.6, 12) ? 1 : -1; return; }
     }
 
     let tx, tz, vTarget, direct = false;
-    const close = d < 70 && Math.abs(T.y - v.y) < 3 && sightClear(v.x, v.z, T.x, T.z, v.y);
+    const close = d < 95 && Math.abs(T.y - v.y) < 3 && sightClear(v.x, v.z, T.x, T.z, v.y);
     if (close) {
       direct = true; v.path = null;
       // where you are relative to me, and me relative to you
@@ -742,7 +761,11 @@ window.createTraffic = function (ctx) {
         tx = T.x - ts * 1.7 + tc * side * 0.8; tz = T.z - tc * 1.7 - ts * side * 0.8;
         vTarget = Tsp + 3;
       }
+      if (Tsp < 3) vTarget = Math.min(vTarget, 3 + d * 0.28); // you're on foot or stopped: slow enough to make the turn in
       if (Tsp < 2 && d < 11) vTarget = 0;                   // you've stopped: box you in
+    } else if ((v.slowT || 0) > 2.5 && d < 150) {
+      // the streets aren't getting me there (dead end, wedged at a junction): head straight for you, kerbs and all
+      direct = true; v.path = null; tx = T.x; tz = T.z; vTarget = 11;
     } else {
       // out of sight: drive the streets to you, or (interceptors) to where you'll be in a few seconds
       const goal = v.role === 'intercept' && Tsp > 6 && d > 90
@@ -837,12 +860,14 @@ window.createTraffic = function (ctx) {
     city.cellsNear(T.x, T.z, 230, cellsTmp);
     const cand = cellsTmp.filter(c => {
       const d = Math.hypot(c.x - T.x, c.z - T.z);
-      if (d < 90 || Math.abs(c.y - T.y) > 15 || inView(c.x, c.y, c.z) || c.link.kind === 'fwy') return false;
+      if (d < 45 || Math.abs(c.y - T.y) > 15 || c.link.kind === 'fwy' || (inView(c.x, c.y, c.z) && sightClear(camera.position.x, camera.position.z, c.x, c.z, c.y))) return false; // unseen: out of frame or round a corner
       const pts = laneOf(c.link, c.lane).pts, a = pts[c.si], b = pts[c.si + 1], l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
       return ((b.x - a.x) * (T.x - c.x) + (b.z - a.z) * (T.z - c.z)) / (l * d) > 0.3; // already heading your way
     });
+    // the closest few places first: help should arrive in seconds, not half a minute
+    cand.sort((a, b) => Math.hypot(a.x - T.x, a.z - T.z) - Math.hypot(b.x - T.x, b.z - T.z));
     for (let t = 0; t < 12 && cand.length; t++) {
-      const c = cand[(rand() * cand.length) | 0];
+      const c = cand[(rand() * Math.min(cand.length, 8)) | 0];
       if (vehicles.some(u => u.state !== 'idle' && (u.x - c.x) ** 2 + (u.z - c.z) ** 2 < 15 * 15)) continue;
       activate(v, c); startPursuit(v);
       return true;
@@ -871,7 +896,7 @@ window.createTraffic = function (ctx) {
       Object.assign(v, { state: 'block', x: c.x + rxv * off, z: c.z + rzv * off, h: h + (i ? -1 : 1) * Math.PI / 2 + (rand() - 0.5) * 0.3, vx: 0, vz: 0, w: 0 });
       v.px = v.x; v.pz = v.z; v.ph = v.h; refreshBox(v); refreshBox(v);
     });
-    return true;
+    return { x: c.x, y: c.y, z: c.z, h };
   }
   function wreck(v, why) {
     if (v.state === 'wreck') return;
@@ -949,6 +974,8 @@ window.createTraffic = function (ctx) {
   }
   function refreshPlayerBox() {
     const b = playerBox;
+    b.type = player.onFoot ? 'circle' : 'box'; b.r = player.onFoot ? 0.38 : 0;
+    b.h = player.onFoot ? 1.75 : 1.5;
     b.x = player.x; b.z = player.z; b.y0 = player.y; b.ux = Math.cos(player.h); b.uz = -Math.sin(player.h);
     b.px = player.px; b.pz = player.pz; b.pux = Math.cos(player.ph); b.puz = -Math.sin(player.ph);
   }
@@ -964,7 +991,11 @@ window.createTraffic = function (ctx) {
       for (const o of solidsTmp) if (nearCar(v.x, v.z, v.h, o, 0.4, v.y)) near.push(localObstacle(near.length, o, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
     } else solidsTmp.length = 0;
     for (const u of vehicles) if (u !== v && u.state !== 'idle' && Math.abs(u.x - v.x) < 6 && Math.abs(u.z - v.z) < 6 && nearCar(v.x, v.z, v.h, u.box, 0.4, v.y)) near.push(localObstacle(near.length, u.box, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
-    if (Math.abs(player.x - v.x) < 6 && Math.abs(player.z - v.z) < 6 && nearCar(v.x, v.z, v.h, playerBox, 0.4, v.y)) near.push(localObstacle(near.length, playerBox, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
+    if (Math.abs(player.x - v.x) < 6 && Math.abs(player.z - v.z) < 6 && nearCar(v.x, v.z, v.h, playerBox, player.onFoot ? 0.05 : 0.4, v.y)) {
+      // a person on foot isn't a crash obstacle: cars don't crumple on pedestrians; a moving car knocks you down instead
+      if (player.onFoot) { const sp = Math.hypot(v.vx, v.vz); if (player.onHitByCar && sp > 2.5 && now - (v.pedHitT || -9) > 1) { v.pedHitT = now; player.onHitByCar(v, sp); } }
+      else near.push(localObstacle(near.length, playerBox, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
+    }
     if (!near.length && v.soft.sleeping) return;
     const res = v.soft.step(dt, near);
     if (res.contacts) v.dented = true;
@@ -1062,6 +1093,8 @@ window.createTraffic = function (ctx) {
         v.stillT = speedOf(v) < 0.3 ? v.stillT + dt : 0;
       }
     },
+    takeover(v) { if (!v || v.state === 'idle') return false; v.crimeTaken = true; v.driverMesh.visible = false; deactivate(v); return true; },
+    threaten(v, seconds = 6) { if (v && v.state === 'drive') v.drv.panicT = Math.max(v.drv.panicT || 0, seconds); },
     /** Active cars near a point and at about the same height, for the player's collision step. */
     boxesNear(x, z, r, out, y = 0) {
       for (const v of vehicles) if (v.state !== 'idle' && Math.abs(v.x - x) < r && Math.abs(v.z - z) < r && Math.abs(v.y - y) < 2.5) out.push(v.box);
@@ -1071,6 +1104,12 @@ window.createTraffic = function (ctx) {
     police: {
       state: pol, sightClear, spawnChaser, spawnRoadblock, startPursuit,
       units: () => vehicles.filter(v => v.police && v.state !== 'idle'),
+      /** Take a unit off the board if you can't see it (wedged, or hopelessly far behind): dispatch sends a fresh one */
+      recycle(v) {
+        if (v.state === 'idle') return false;
+        const cx = camera.position.x, cz = camera.position.z;
+        if (inView(v.x, v.y + 1, v.z) && Math.hypot(v.x - cx, v.z - cz) < 260 && sightClear(cx, cz, v.x, v.z, v.y)) return false; // you'd see it vanish
+        deactivate(v); v.deployed = false; if (v.driverMesh) v.driverMesh.visible = true; return true; },
       /** End the chase: units out of sight leave at once, the rest pull over and are recycled once you're gone */
       standDown() {
         pol.active = false;

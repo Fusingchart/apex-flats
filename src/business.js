@@ -15,7 +15,7 @@ const BUSINESSES = [
   {id:'import',name:'Harbour Import / Export',kind:'production',product:'Imported cars',price:420000,level:11,unit:6000,cap:25,secs:140,supplyCost:48000,upkeep:6000,raid:.3,office:true,dist:1600,angle:4.4},
   {id:'club',name:'Club Meridian',kind:'venue',product:'Nightlife',price:750000,level:15,income:40000,safe:100000,upkeep:8000,raid:.2,office:true,dist:900,angle:5.6},
   {id:'freight',name:'Ashby Freight Hub',kind:'production',product:'Freight',price:1400000,level:20,unit:11000,cap:40,secs:120,supplyCost:140000,upkeep:12000,raid:.35,office:true,dist:2200,angle:1.5},
-  {id:'lab',name:'Apex Prototype Labs',kind:'production',product:'Prototypes',price:3000000,level:26,unit:28000,cap:30,secs:160,supplyCost:320000,upkeep:20000,raid:.4,office:true,dist:2800,angle:3.4},
+  {id:'lab',name:'Apex Prototype Labs',kind:'production',product:'Prototypes',price:3000000,level:22,unit:28000,cap:30,secs:160,supplyCost:320000,upkeep:20000,raid:.4,office:true,dist:2800,angle:3.4},
 ];
 const UPGRADES = {
   production:{equipment:{name:'Equipment',cost:.5,desc:'Produces 35% faster'},staff:{name:'Staff',cost:.4,desc:'Product sells for 30% more'},security:{name:'Security',cost:.3,desc:'Raids 80% less likely'}},

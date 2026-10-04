@@ -2039,7 +2039,7 @@ window.buildWorld = function (ctx) {
   }
 
   /* ================= Bridges: decks, parapets and piers ================= */
-  const solidBox = (x, z, hx, hz, y0, h, ux, uz, mu = 0.5) => solids.push({ type: 'box', x, z, hx, hz, h, y0, ux, uz, mu });
+  const solidBox = (x, z, hx, hz, y0, h, ux, uz, mu = 0.5) => { const o = { type: 'box', x, z, hx, hz, h, y0, ux, uz, mu }; solids.push(o); return o; };
   // `rails(i, side)` says whether to put a parapet at point i on that side (+1 right, -1 left)
   function dressDeck(fr, deck, hw, piers, rails) {
     let run = [];
@@ -2215,12 +2215,13 @@ window.buildWorld = function (ctx) {
     const q = L.at(a, o); solidBox(q.x, q.z, w / 2, d / 2, y0, h, Math.cos(L.yaw), -Math.sin(L.yaw), 0.6);
     if (foot) addRect(q.x, q.z, L.p.tx, L.p.tz, w / 2, d / 2);
   };
-  function parkedCar(x, z, yaw) {
-    const y = groundAt(x, z), s = Math.sin(yaw), c = Math.cos(yaw);
-    put('carBody', x, y, z, yaw, 1, 1, 1, pickOf(CARC));
-    put('carCabin', x, y, z, yaw, 1, 1, 1);
-    put('carWheels', x, y, z, yaw, 1, 1, 1);
-    solidBox(x, z, 0.9, 2.2, y, 1.5, c, -s, 0.5);
+  // Parked cars are instanced stand-ins; near the player the crime layer swaps them for real cars you can break into
+  const parkedSpots = [];
+  function parkedCar(x, z, yaw, drive = false) {
+    const y = groundAt(x, z), s = Math.sin(yaw), c = Math.cos(yaw), color = pickOf(CARC);
+    const items = [put('carBody', x, y, z, yaw, 1, 1, 1, color), put('carCabin', x, y, z, yaw, 1, 1, 1), put('carWheels', x, y, z, yaw, 1, 1, 1)];
+    const solid = solidBox(x, z, 0.9, 2.2, y, 1.5, c, -s, 0.5);
+    parkedSpots.push({ x, y, z, yaw, color, items, solid, drive, home: { x, z, h: 1.5 }, swapped: false, taken: false });
     parked++;
   }
   // rooftop plant: a few boxes scattered over a roof of w x d centred at (a, o)
@@ -2344,7 +2345,7 @@ window.buildWorld = function (ctx) {
       for (let o = 9; o <= front - 1; o += 2) { const q = L.at(gSide * -1.4, o); put('slab', q.x, groundAt(q.x, q.z) - 0.25, q.z, L.yaw, 1.2, 0.31, 2.1); stamp(q.x, q.z, 1.0, WALK); }
       if (rand() < 0.4) { const q = L.at(-gSide * (w / 2 - 1), front - 1.2); put('hedge', q.x, groundAt(q.x, q.z) - 0.2, q.z, L.yaw, w * 0.4, 1.1, 0.9); }
     }
-    if (rand() < 0.55) { const q = L.at(ga, HALF + 6.5); parkedCar(q.x, q.z, L.yaw); }
+    if (rand() < 0.55) { const q = L.at(ga, HALF + 6.5); parkedCar(q.x, q.z, L.yaw, true); }
     // back-yard fence
     if (!rural && rand() < 0.8) {
       const fc = pickOf(FENCE), back = front + d + 13, half = Math.min(lotW, w + gW + 6) / 2;
@@ -2632,6 +2633,19 @@ window.buildWorld = function (ctx) {
       if (y > g + 0.8 && heightAt(x, z, y) > g + 0.5) return 'asphalt'; // on a bridge
       if (bitsAt(x, z) & (PAVED | WALK)) return 'asphalt';
       return g < WATER - 0.3 ? 'water' : 'grass';
+    },
+    parkedSpots,
+    /** Hide a parked stand-in (its instances and its solid) while a real car stands in its place, or bring it back */
+    swapParked(spot, hide) {
+      spot.swapped = hide;
+      for (const it of spot.items) {
+        if (!it.mesh) continue;
+        if (hide) it.mesh.setMatrixAt(it.index, M4.makeScale(0, 0, 0));
+        else { Q.setFromEuler(E.set(0, it.yaw, 0)); it.mesh.setMatrixAt(it.index, M4.compose(V.set(it.x, it.y, it.z), Q, S.set(it.sx, it.sy, it.sz))); }
+        it.mesh.instanceMatrix.needsUpdate = true;
+      }
+      const o = spot.solid;
+      if (hide) { o.x = o.z = 1e7; o.h = 0; } else { o.x = spot.home.x; o.z = spot.home.z; o.h = spot.home.h; }
     },
     propsNear(x, z, r, out) {
       out.length = 0;

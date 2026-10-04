@@ -116,6 +116,7 @@ window.createEmpireSystem = function({city,scene,car,career,missions,catalog,tra
     else if(a==='collect'&&at(id)){const n=empire.collect(id);notify('SAFE',`Collected ${money(n)}`);}
     else if(a==='defend')launch(defendJob());
     else if(a==='waypoint'){wp.target=sites[id].point;notify('WAYPOINT',empire.biz(id).name);toggle(false);}
+    else if(a==='taxi'&&(window.apex?.police?.state.level||0)>0)notify('TAXI','No driver will take you with the police on your tail.');
     else if(a==='taxi'&&!missions.engine.active&&career.state.cash>=TAXI){career.state.cash-=TAXI;career.save();travel(sites[id].pose);toggle(false);notify('TAXI',`Dropped at ${empire.biz(id).name}`);}
     missions.refresh();if(open)render();
   }

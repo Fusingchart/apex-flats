@@ -6,7 +6,7 @@
   <title>Apex Flats</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="src/style.css?v=30">
+  <link rel="stylesheet" href="src/style.css?v=40">
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -27,7 +27,10 @@
     <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
     <b>Z</b><span>Slow motion</span>
     <b>M</b><span>Mute</span>
-    <b>G</b><span>Graphics quality (low / medium / high)</span>
+    <b>G</b><span>Graphics quality (driving)</span>
+    <b>F / G</b><span>Enter or carjack / break a window (on foot)</span>
+    <b>Mouse / 1–4</b><span>Aim, fire, change weapon (on foot)</span>
+    <b>Enter</b><span>Shop at Apex Customs (blue $)</span>
     <b>H</b><span>Hide this panel</span>
   </div>
 </div>
@@ -36,7 +39,12 @@
 <div id="impact"></div>
 <div id="wanted" class="hud"><div id="stars"></div><div id="bounty"></div></div>
 <div id="copmsg"></div>
+<div id="banner"></div>
+<div id="hurt"></div>
 <canvas id="map" class="hud" width="340" height="340" aria-label="Minimap"></canvas>
+<div id="crime-status" class="hud" hidden>HEALTH 100 · PISTOL</div>
+<div id="crime-prompt" class="hud" hidden></div>
+<div id="crosshair" aria-hidden="true"></div>
 
 <div id="left" class="hud">
   <div id="damage" class="panel">
@@ -76,6 +84,7 @@
     <h2>Apex <span>Flats</span></h2>
     <p>Ashby Valley in the afternoon: a river city with a downtown, suburbs and an industrial south bank, villages in the hills, mountain roads and a freeway across it all. Earn your place in a 24-car garage. Complete contracts for cash and XP, collect medals, and unlock faster cars. Pick an owned car to begin.</p>
     <p id="loading" class="hint">Building the valley…</p>
+    <button id="start-foot" class="action primary">Start on foot</button>
     <div id="start-cards" class="cards"></div>
     <p class="hint">Two starter cars are yours. Press J for contracts or V for the garage. <a href="car-studio.html" style="color:inherit">Inspect models ↗</a></p>
   </div>
@@ -84,7 +93,7 @@
 <div id="garage" class="overlay" hidden>
   <div class="intro">
     <div class="board-head"><div><div class="eyebrow">APEX MOTOR CLUB</div><h2>Garage <small>/ 24</small></h2></div><button id="close-garage" class="action">Back to drive · Esc</button></div>
-    <div class="board-tools"><strong id="garage-balance"></strong><select id="garage-filter" aria-label="Filter cars"><option value="all">All cars</option><option value="owned">My cars</option><option>Sedan</option><option>Hatchback</option><option>Grand tourer</option><option>Utility</option><option>Muscle coupe</option><option>Supercar</option></select></div><p id="garage-message" role="status"></p>
+    <div class="board-tools"><strong id="garage-balance"></strong><select id="garage-filter" aria-label="Filter cars"><option value="all">All cars</option><option value="owned">My cars</option><option>Sedan</option><option>Hatchback</option><option>Grand tourer</option><option>Utility</option><option>Muscle coupe</option><option>Supercar</option></select><button id="garage-call" class="action">Call selected car</button></div><p id="garage-message" role="status"></p>
     <div id="garage-cards" class="cards"></div>
     <p class="hint">Choose an owned car or buy a new one. Rank unlocks come from completing contracts.</p>
   </div>
@@ -92,29 +101,34 @@
 
 
 <div id="career-hud" class="panel"><div><strong id="career-cash">$2,500</strong><span id="career-rank">RANK 1</span><small id="career-owned"></small></div><button id="open-missions">Contracts <kbd>J</kbd></button><button id="open-garage">Garage <kbd>V</kbd></button><button id="open-empire">Business <kbd>B</kbd></button></div>
-<div id="biz-prompt" class="panel" hidden></div><div id="biz-raid" hidden></div>
+<div id="biz-prompt" class="panel" hidden></div><div id="shop-prompt" class="panel" hidden></div>
+<div id="story-job" class="panel" hidden><div class="job-meta">MARLOWE'S JOB <strong id="story-dist"></strong></div><h3 id="story-name"></h3><p><span id="story-arrow">↑</span> <span id="story-step"></span></p></div>
+<div id="story-brief" class="overlay" hidden role="dialog" aria-modal="true"><div class="result-content"><div class="eyebrow"></div><h2></h2><p class="brief-text"></p><div class="result-actions"><button id="story-ok" class="action">Got it</button></div></div></div>
+<div id="shop" class="overlay" hidden role="dialog" aria-modal="true"><div class="result-content"><div class="eyebrow">APEX CUSTOMS · <span id="shop-cash"></span></div><h2 id="shop-name"></h2><div id="shop-body"></div><div class="result-actions"><button id="shop-close" class="action">Leave · Esc</button></div></div></div><div id="biz-raid" hidden></div>
 <div id="empire" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="empire-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">APEX HOLDINGS / CEO</div><h2 id="empire-title">Build your empire.</h2></div><button id="close-empire" class="action">Back to drive · Esc</button></div><p>Start small with a courier depot, register the company with an office, then grow into salvage, import/export, nightlife, freight and prototype labs. Keep them supplied, sell what they make, pay the upkeep, and protect them from raids.</p><div id="empire-body"></div></div></div>
 <div id="active-job" class="panel" hidden><div class="job-meta">ACTIVE CONTRACT <strong id="job-time"></strong></div><h3 id="job-name"></h3><div id="job-progress"></div><p><span id="job-arrow">↑</span> <span id="job-target"></span></p></div>
-<div id="mission-board" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="board-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">ASHBY VALLEY / DRIVER NETWORK</div><h2 id="board-title">Find your next run.</h2></div><button id="close-missions" class="action">Back to drive · Esc</button></div><p>50 contracts across ten tiers. Later tiers need a fast car, clean lines and intact cargo. Cash, XP, and medals on every clear. First clears pay a 50% cash bonus. Gold pays 25% extra; silver pays 10% extra.</p><p class="subtle">Starting a contract takes you to the event start and repairs your car. Recovery ends the run. Menus pause the clock. Green map lines show checkpoint order, not turn-by-turn directions.</p><div class="board-tools"><strong id="board-balance"></strong><select id="mission-filter" aria-label="Filter contracts"><option value="all">All contracts</option><option value="delivery">Delivery</option><option value="race">Checkpoint races</option><option value="clean">Clean driving</option><option value="drift">Drift</option><option value="escape">Police escape</option></select><button id="abandon-job" class="action" hidden>Abandon current contract</button></div><div id="contract-list"></div><p id="save-status" class="subtle"></p></div></div>
+<div id="mission-board" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="board-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">ASHBY VALLEY / DRIVER NETWORK</div><h2 id="board-title">Find your next run.</h2></div><button id="close-missions" class="action">Back to drive · Esc</button></div><p>50 contracts across ten tiers. Later tiers need a fast car, clean lines and intact cargo. Cash, XP, and medals on every clear. First clears pay a 50% cash bonus. Gold pays 25% extra; silver pays 10% extra.</p><p class="subtle">Contracts start where you are, in whatever you're driving. Damage carries over. Recovery, busted or wasted ends the run. Menus pause the clock. Green map lines show checkpoint order, not turn-by-turn directions.</p><div class="board-tools"><strong id="board-balance"></strong><select id="mission-filter" aria-label="Filter contracts"><option value="all">All contracts</option><option value="delivery">Delivery</option><option value="race">Checkpoint races</option><option value="clean">Clean driving</option><option value="drift">Drift</option><option value="escape">Police escape</option></select><button id="abandon-job" class="action" hidden>Abandon current contract</button></div><div id="contract-list"></div><p id="save-status" class="subtle"></p></div></div>
 <div id="mission-result" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-content"><div id="result-title" class="eyebrow"></div><h2 id="result-name"></h2><p id="result-reason"></p><strong id="result-pay"></strong><div class="result-actions"><button id="result-close" class="action">Keep driving</button><button id="result-retry" class="action">Retry contract</button><button id="result-board" class="action">Find another run</button></div></div></div>
 <canvas id="bigmap" width="1100" height="1100" hidden aria-label="Full map"></canvas>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="vendor/three.min.js"></script>
 <script>THREE.ColorManagement.legacyMode = false; // hex colours are sRGB and get converted to linear</script>
 <script src="src/hdr.js?v=29"></script>
 <script src="src/grass.js?v=29"></script>
 <script src="src/post.js?v=29"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="vendor/GLTFLoader.js"></script>
 <script src="src/carmodel.js?v=29"></script>
 <script src="src/softbody.js?v=29"></script>
 <script src="src/carmesh.js?v=29"></script>
-<script src="src/city.js?v=29"></script>
-<script src="src/traffic.js?v=29"></script>
-<script src="src/police.js?v=29"></script>
-<script src="src/career.js?v=30"></script>
-<script src="src/missions.js?v=30"></script>
-<script src="src/business.js?v=30"></script>
-<script src="src/empire.js?v=30"></script>
-<script src="src/main.js?v=30"></script>
+<script src="src/city.js?v=41"></script>
+<script src="src/traffic.js?v=43"></script>
+<script src="src/police.js?v=42"></script>
+<script src="src/career.js?v=41"></script>
+<script src="src/missions.js?v=43"></script>
+<script src="src/business.js?v=43"></script>
+<script src="src/empire.js?v=41"></script>
+<script src="src/crime.js?v=41"></script>
+<script src="src/street.js?v=2"></script>
+<script src="src/main.js?v=43"></script>
 </body>
 </html>
