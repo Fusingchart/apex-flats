@@ -306,13 +306,15 @@ class SoftBody {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setAttribute('rest', new THREE.BufferAttribute(Float32Array.from(restP), 3)); // undeformed position, for panel details
     pos.setUsage(THREE.DynamicDrawUsage);
-    geometry.computeVertexNormals();
-    return { geometry, restP, base, fr, noise, dir, colors, col, scrape: opts.scrape || null, crack: opts.crack || null, wrinkle: opts.wrinkle ?? 0.03, live: true };
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    const restN = Float32Array.from(geometry.attributes.normal.array);
+    return { geometry, restP, restN, base, fr, noise, dir, colors, col, scrape: opts.scrape || null, crack: opts.crack || null, wrinkle: opts.wrinkle ?? 0.03, live: true };
   }
 
   deform(bd) {
     const { restP, base, fr, noise, dir, colors, col, scrape, crack, wrinkle } = bd;
     const arr = bd.geometry.attributes.position.array, n = restP.length / 3;
+    let displaced = false;
     const r = this._r || (this._r = new Float32Array(5));
     for (let v = 0; v < n; v++) {
       const i = v * 3;
@@ -322,6 +324,7 @@ class SoftBody {
       arr[i] = restP[i] + r[0] + dir[i] * wr;
       arr[i + 1] = restP[i + 1] + r[1] + dir[i + 1] * wr;
       arr[i + 2] = restP[i + 2] + r[2] + dir[i + 2] * wr;
+      if (Math.abs(arr[i]-restP[i])+Math.abs(arr[i+1]-restP[i+1])+Math.abs(arr[i+2]-restP[i+2]) > 1e-6) displaced = true;
       let c0 = col[0], c1 = col[1], c2 = col[2];
       if (scrape) {
         const t = Math.max(smoothstep(0.06, 0.4, d) * smoothstep(-0.3, 0.7, noise[v]) * 0.85, // paint flakes off the folds
@@ -336,7 +339,9 @@ class SoftBody {
     }
     bd.geometry.attributes.position.needsUpdate = true;
     bd.geometry.attributes.color.needsUpdate = true;
-    bd.geometry.computeVertexNormals();
+    // Keep Blender's authored surface normals on pristine/repaired bodywork.
+    if (displaced) bd.geometry.computeVertexNormals();
+    else { bd.geometry.attributes.normal.array.set(bd.restN); bd.geometry.attributes.normal.needsUpdate = true; }
     bd.geometry.computeBoundingSphere();
   }
 }

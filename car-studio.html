@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apex — Vehicle Studio</title>
+<style>
+:root{color-scheme:light;font:14px system-ui,-apple-system,sans-serif;color:#202833;background:#e5e7eb}*{box-sizing:border-box}body{margin:0}canvas{display:block;position:fixed;inset:0;width:100%;height:100%}header{position:absolute;top:30px;left:36px;right:36px;display:flex;justify-content:space-between;align-items:center}a{color:inherit;text-decoration:none}header b{font-size:17px;letter-spacing:.14em}header nav{display:flex;gap:24px;font-size:12px}main{position:absolute;left:36px;top:110px;pointer-events:none}.eyebrow{font-size:10px;letter-spacing:.22em;color:#68727d}h1{font-size:clamp(30px,5vw,56px);font-weight:500;letter-spacing:-.045em;line-height:1;margin:14px 0}#desc{max-width:285px;color:#68727d;line-height:1.6;font-size:13px}#status{font-size:12px;color:#68727d}footer{position:absolute;left:36px;right:36px;bottom:28px}.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:20px}.toolbar span{margin-left:15px;color:#68727d;font-size:11px}button{font:inherit;cursor:pointer;border:1px solid #bfc5cc;background:#ffffff75;color:#35404e;border-radius:6px;padding:9px 15px}button:hover{background:#fff}button:focus-visible,a:focus-visible{outline:3px solid #267bc4;outline-offset:3px}button[aria-pressed="true"]{background:#253544;color:#fff;border-color:#253544}.cars{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.cars button{text-align:left;padding:14px 16px;backdrop-filter:blur(18px)}.cars small{display:block;font-size:9px;letter-spacing:.1em;opacity:.65;margin-bottom:5px}.cars strong{font-size:13px;font-weight:500}.hint{margin-top:16px;display:flex;justify-content:space-between;font-size:10px;color:#68727d;letter-spacing:.03em}@media(max-width:700px){header{left:20px;right:20px;top:20px}header nav{gap:12px}main{left:20px;top:80px}#desc{max-width:240px}.cars{grid-template-columns:repeat(3,1fr)}.cars button{padding:9px}footer{left:20px;right:20px;bottom:15px}.hint span:last-child{display:none}.toolbar span{display:none}}
+</style>
+</head>
+<body>
+<canvas id="view" aria-label="Interactive 3D car model"></canvas>
+<header><a href="index.html"><b>APEX / STUDIO</b></a><nav><a href="art/vehicles/apex-vehicles.blend" download>Blender source ↗</a><a href="index.html">Drive ↗</a></nav></header>
+<main><div class="eyebrow">ORIGINAL VEHICLE COLLECTION / <span id="number">01</span></div><h1 id="name">Apex GT</h1><p id="desc">Loading the design studio…</p><p id="status" role="status"></p></main>
+<footer><div class="toolbar"><button data-angle="front">Front ¾</button><button data-angle="rear">Rear ¾</button><button data-angle="side">Profile</button><button id="rotate" aria-pressed="false">Rotate</button><button id="wire" aria-pressed="false">Wireframe</button><span>Drag to orbit · Scroll to zoom</span></div><div class="cars" id="cars" aria-label="Choose a vehicle"></div><div class="hint"><span>ORIGINAL GEOMETRY · BUILT IN BLENDER</span><span>SCULPTED PANELS / MACHINED WHEELS / MODELED INTERIORS</span></div></footer>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>THREE.ColorManagement.legacyMode=false;</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="src/hdr.js?v=28"></script><script src="src/carmodel.js?v=28"></script>
+<script>
+(async()=>{
+const $=id=>document.getElementById(id),renderer=new THREE.WebGLRenderer({canvas:$('view'),antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.9;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#e5e7eb');scene.fog=new THREE.Fog('#e5e7eb',20,55);
+const camera=new THREE.PerspectiveCamera(39,innerWidth/innerHeight,.1,100);camera.position.set(5.2,2.8,6.0);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);controls.target.set(0,.65,0);controls.enableDamping=true;controls.minDistance=3;controls.maxDistance=16;controls.maxPolarAngle=Math.PI*.48;controls.autoRotateSpeed=.55;controls.enablePan=false;
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,180),new THREE.MeshStandardMaterial({color:'#c5cbd2',roughness:.79,metalness:.05}));floor.rotation.x=-Math.PI/2;floor.position.y=-.008;floor.receiveShadow=true;scene.add(floor);
+scene.add(new THREE.HemisphereLight('#eaf3ff','#89909a',.65));
+for(const [pos,power,color,shadow]of [[[4,7,5],2.3,'#fff9ef',true],[[-5,4,-3],1.2,'#d8e9ff',false]]){const l=new THREE.DirectionalLight(color,power);l.position.set(...pos);l.castShadow=shadow;if(shadow){l.shadow.mapSize.set(4096,4096);Object.assign(l.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.1,far:25});l.shadow.bias=-.00005;l.shadow.normalBias=.015;}scene.add(l);}
+const sky=await loadHDR('assets/sky/sky_4k.hdr');const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromEquirectangular(sky.envTex).texture;pmrem.dispose();sky.envTex.dispose();sky.skyTex.dispose();
+const list=await fetch('assets/cars/cars.json').then(r=>r.json());
+const colors=[[.018,.16,.28],[.48,.53,.59],[.62,.025,.04],[.19,.27,.20],[.55,.16,.025],[.9,.22,.025]];
+const types=['GRAND TOURER','SPORT SEDAN','HOT HATCH','UTILITY','MUSCLE COUPE','SUPERCAR'];
+const descriptions=['A low two-door GT with a long bonnet, fastback glass and a raised rear wing.','A longer four-door body with a defined boot, split side glass and ten-spoke alloys.','A short-wheelbase hatch with upright rear glass and a compact four-door cabin.','A taller utility body with large tires, roof rails and a raised cabin.','A broad-shouldered two-door coupe with a long nose and a low roof.','A low, wide mid-engine silhouette with side intakes, wider rear tires and an aero wing.'];
+const cache=new Map();let group=null,request=0,current=-1,wire=false;
+async function select(i){const token=++request;$('status').textContent='Loading model…';try{let t=cache.get(i);if(!t){t=await loadCarModel('assets/cars/'+list[i].file,list[i]);cache.set(i,t);}if(token!==request)return;if(group){scene.remove(group);const mats=new Set();group.traverse(o=>{if(o.isMesh)mats.add(o.material)});for(const m of mats)if(m.userData.previewOwned)m.dispose();}group=new THREE.Group();const kit=buildModelCar(t,{paint:colors[i]});for(const {mesh}of kit.meshes)group.add(mesh);for(let j=0;j<4;j++){const w=kit.makeWheel(j),root=new THREE.Group();root.position.copy(w.center);root.add(w.spin,w.fixed);group.add(root);}const shared=new Set([...t.body.map(b=>b.mat),...t.wheels.flatMap(w=>[...w.spin,...w.fixed].map(p=>p.mat))]);group.traverse(o=>{if(o.isMesh){if(shared.has(o.material))o.material=o.material.clone();o.material.userData.previewOwned=true;o.material.wireframe=wire;}});scene.add(group);current=i;$('name').textContent=list[i].name;$('number').textContent=String(i+1).padStart(2,'0');$('desc').textContent=descriptions[i];$('status').textContent=`${list[i].length.toFixed(2)} m · Four independent wheels · Editable Blender source`;document.querySelectorAll('#cars button').forEach((b,n)=>b.setAttribute('aria-pressed',n===i));}catch(e){$('status').textContent='Could not load this model: '+e.message;console.error(e);}}
+list.forEach((car,i)=>{const b=document.createElement('button');b.innerHTML=`<small>${String(i+1).padStart(2,'0')} / ${types[i]}</small><strong>${car.name}</strong>`;b.setAttribute('aria-pressed','false');b.onclick=()=>select(i);$('cars').append(b);});
+$('rotate').onclick=()=>{controls.autoRotate=!controls.autoRotate;$('rotate').setAttribute('aria-pressed',controls.autoRotate)};
+$('wire').onclick=()=>{wire=!wire;$('wire').setAttribute('aria-pressed',wire);group?.traverse(o=>{if(o.isMesh)o.material.wireframe=wire})};
+for(const b of document.querySelectorAll('[data-angle]'))b.onclick=()=>{const views={front:[5.2,2.8,6.0],rear:[-5.2,2.8,-6.0],side:[8.0,2.0,0]};camera.position.set(...views[b.dataset.angle]);controls.autoRotate=false;$('rotate').setAttribute('aria-pressed','false');controls.update();};
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.zoom=innerWidth<700?.47:1;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)});await select(0);window.carStudio={select,renderer,scene,camera,get current(){return current},get group(){return group},cache};
+})().catch(e=>{document.getElementById('status').textContent=e.message;console.error(e)});
+</script>
+</body></html>

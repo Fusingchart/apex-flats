@@ -1,57 +1,68 @@
 [
   {
-    "file": "concept.glb",
-    "name": "Concept",
-    "length": 4.45,
-    "credit": "Car Concept by Eric Chadwick, (c) 2024 Darmstadt Graphics Group GmbH, CC-BY 4.0 (KhronosGroup/glTF-Sample-Assets), from a public-domain model by Unity Fan",
-    "id": "concept"
+    "id": "gt",
+    "name": "Apex GT",
+    "file": "custom/gt.glb",
+    "length": 4.55,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
   },
   {
     "id": "sedan",
-    "file": "sedan.glb",
-    "name": "Sedan",
-    "length": 4.7,
-    "forward": "+z",
+    "name": "Commuter",
+    "file": "custom/sedan.glb",
+    "length": 4.78,
     "up": "+y",
-    "preservePaintMap": true,
-    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
-    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
-    "license": "https://creativecommons.org/licenses/by/4.0/"
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
   },
   {
     "id": "hatchback",
-    "file": "hatchback.glb",
-    "name": "Hatchback",
-    "length": 4.2,
-    "forward": "+z",
+    "name": "Hot Hatch",
+    "file": "custom/hatchback.glb",
+    "length": 4.22,
     "up": "+y",
-    "preservePaintMap": true,
-    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
-    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
-    "license": "https://creativecommons.org/licenses/by/4.0/"
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
   },
   {
     "id": "suv",
-    "file": "suv.glb",
-    "name": "Suv",
-    "length": 4.7,
-    "forward": "+z",
+    "name": "Summit",
+    "file": "custom/suv.glb",
+    "length": 4.82,
     "up": "+y",
-    "preservePaintMap": true,
-    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
-    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
-    "license": "https://creativecommons.org/licenses/by/4.0/"
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
   },
   {
     "id": "coupe",
-    "file": "coupe.glb",
-    "name": "Coupe",
-    "length": 4.5,
-    "forward": "-z",
+    "name": "Torque V8",
+    "file": "custom/coupe.glb",
+    "length": 4.67,
     "up": "+y",
-    "preservePaintMap": true,
-    "credit": "Generic passenger car pack by Comrade1280, CC BY 4.0; converted from FBX, paint textures neutralized and PBR materials adapted for Apex Flats",
-    "source": "https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5",
-    "license": "https://creativecommons.org/licenses/by/4.0/"
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
+  },
+  {
+    "id": "supercar",
+    "name": "Vortex",
+    "file": "custom/supercar.glb",
+    "length": 4.62,
+    "up": "+y",
+    "forward": "+z",
+    "authored": true,
+    "credit": "Original Apex Flats vehicle; authored in Blender with tools/build_cars.py",
+    "source": "art/vehicles/apex-vehicles.blend"
   }
 ]

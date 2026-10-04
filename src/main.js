@@ -127,7 +127,7 @@ function nearSolids(x, z, r, out) {
 // Torque curves share one shape, scaled to each engine's peak torque and rev range
 const TORQUE_SHAPE = [[0, 0.42], [0.13, 0.54], [0.33, 0.78], [0.53, 0.94], [0.68, 1], [0.86, 0.93], [1, 0.8], [1.18, 0.47]];
 const PRESETS = [
-  { name: 'Apex GT', model: 'concept', kind: 'Rear-drive GT', blurb: 'Low, wide, winged. Balanced and playful; steps out if you ask.', style: 'gt', paint: [0.012, 0.012, 0.014], paint2: [0.75, 0.75, 0.74], stripe: true, stripeColor: [0.82, 0.82, 0.8], wing: true,
+  { name: 'Apex GT', model: 'gt', kind: 'Rear-drive GT', blurb: 'Low, wide, winged. Balanced and playful; steps out if you ask.', style: 'gt', paint: [0.018, 0.16, 0.28], paint2: [0.75, 0.75, 0.74], stripe: true, stripeColor: [0.82, 0.82, 0.8], wing: true,
     drive: 'rwd', mass: 1250, inertia: 1850, cg: 0.5, peak: 425, redline: 7600, idle: 900, gears: [3.45, 2.35, 1.72, 1.33, 1.07, 0.86], diff: 3.9, grip: 1.08, brake: 13000, drag: 0.43, steer: 0.6, assist: 0.4 },
   { name: 'Commuter', model: 'sedan', kind: 'Front-drive sedan', blurb: 'Soft, safe, understeers when pushed.', style: 'sedan', paint: [0.66, 0.67, 0.68], stripe: false, wing: false,
     drive: 'fwd', mass: 1400, inertia: 2150, cg: 0.53, peak: 260, redline: 6500, idle: 800, gears: [3.6, 2.1, 1.4, 1.03, 0.8, 0.66], diff: 3.8, grip: 1.0, brake: 12000, drag: 0.36, steer: 0.62, assist: 0.65 },
@@ -135,9 +135,9 @@ const PRESETS = [
     drive: 'fwd', mass: 1290, inertia: 1750, cg: 0.5, peak: 380, redline: 7000, idle: 850, gears: [3.4, 2.2, 1.6, 1.25, 1.0, 0.82], diff: 4.1, grip: 1.12, brake: 13500, drag: 0.4, steer: 0.62, assist: 0.55 },
   { name: 'Summit', model: 'suv', kind: 'All-wheel-drive SUV', blurb: 'Heavy and tall. Grips everywhere, leans a lot.', style: 'suv', paint: [0.16, 0.24, 0.18], stripe: false, wing: false,
     drive: 'awd', mass: 1950, inertia: 3200, cg: 0.7, peak: 540, redline: 6200, idle: 750, gears: [3.8, 2.3, 1.55, 1.15, 0.9, 0.72], diff: 3.7, grip: 1.0, brake: 15000, drag: 0.5, steer: 0.58, wheel: 0.36, assist: 0.65 },
-  { name: 'Torque V8', model: 'coupe', kind: 'Rear-drive muscle', blurb: 'Huge low-down shove. Smoke on demand.', style: 'coupe', paint: [0.32, 0.04, 0.05], stripe: true, wing: false,
+  { name: 'Torque V8', model: 'coupe', kind: 'Rear-drive muscle', blurb: 'Huge low-down shove. Smoke on demand.', style: 'coupe', paint: [0.55, 0.16, 0.025], stripe: true, wing: false,
     drive: 'rwd', mass: 1720, inertia: 2600, cg: 0.52, peak: 680, redline: 6400, idle: 700, gears: [2.9, 1.95, 1.45, 1.12, 0.9, 0.72], diff: 3.6, grip: 1.05, brake: 15000, drag: 0.44, steer: 0.58, assist: 0.32 },
-  { name: 'Vortex', model: 'concept', kind: 'All-wheel-drive supercar', blurb: 'Brutal launch, huge grip, 300+ km/h.', style: 'coupe', paint: [0.03, 0.03, 0.035], stripe: true, wing: true,
+  { name: 'Vortex', model: 'supercar', kind: 'All-wheel-drive supercar', blurb: 'Brutal launch, huge grip, 300+ km/h.', style: 'coupe', paint: [0.9, 0.22, 0.025], stripe: true, wing: true,
     drive: 'awd', mass: 1480, inertia: 2000, cg: 0.45, peak: 760, redline: 8600, idle: 1000, gears: [3.3, 2.35, 1.8, 1.42, 1.15, 0.94], diff: 3.6, grip: 1.25, brake: 17000, drag: 0.36, steer: 0.6, assist: 0.55 },
 ];
 const SPLIT = { rwd: [0, 1], fwd: [1, 0], awd: [0.42, 0.58] };

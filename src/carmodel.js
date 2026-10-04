@@ -1,4 +1,4 @@
-// Licensed glTF car templates from assets/cars/cars.json, normalized into the game's
+// glTF car templates from assets/cars/cars.json, normalized into the game's
 // frame (x left, y up, z forward). Body geometry is shared until deformation; each
 // vehicle gets independent paint and lamp materials, with wheels on their own axles.
 (function () {
@@ -83,11 +83,18 @@ window.loadCarModel = async function (url, cfg = {}) {
   const isGlass = m => m.transmission > 0 || /glass|window|windshield|windscreen/i.test(m.name) || (m.transparent && m.opacity < 0.9);
   const fixMat = m => {
     if (isGlass(m)) {
+      if (cfg.authored) {
+        const glass = m.clone();
+        glass.transmission = 0; glass.transparent = true; glass.opacity = 0.72;
+        glass.color.setRGB(0.035, 0.07, 0.085); glass.roughness = 0.09;
+        glass.depthWrite = false; glass.side = THREE.DoubleSide; glass.vertexColors = true;
+        return glass;
+      }
       return new THREE.MeshPhysicalMaterial({ name: m.name, color: new THREE.Color(0.06, 0.07, 0.08), roughness: 0.03, metalness: 0.1, clearcoat: 1,
         transparent: true, opacity: 0.45, envMapIntensity: 1.5, vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
     }
     m.vertexColors = true;
-    if (/paint|body|exterior/i.test(m.name)) { m.clearcoat = Math.max(m.clearcoat || 0, 1); m.clearcoatRoughness = 0.03; }
+    if (/paint|body|exterior/i.test(m.name)) { m.clearcoat = Math.max(m.clearcoat || 0, 1); m.clearcoatRoughness = cfg.authored ? 0.13 : 0.03; }
     return m;
   };
   const PAINT = cfg.paint ? new RegExp(cfg.paint, 'i') : /paint|car_?paint|body_?col|exterior|carrosserie/i;
@@ -129,12 +136,17 @@ window.loadCarModel = async function (url, cfg = {}) {
     const tb = new THREE.Box3(); for (const o of (tyre.length ? tyre : parts)) { const g = place(o); g.computeBoundingBox(); tb.union(g.boundingBox); }
     const c = tb.getCenter(vec()), r = tb.getSize(vec()).y / 2;
     const spin = [], fixed = [];
+    const batches = new Map();
     for (const o of parts) {
       const g = place(o).translate(-c.x, -c.y, -c.z), nm = (o.material.name || '') + ' ' + (o.name || '');
       // Wheel materials use vertex colours too; glTF usually omits this attribute.
       if (!g.hasAttribute('color')) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
-      (/caliper|calliper|brake.?pad|brakepad/i.test(nm) || (/brake/i.test(nm) && !/disc|disk|rotor/i.test(nm)) ? fixed : spin).push({ geo: g, mat: fixMat(o.material) });
+      const stationary = /caliper|calliper|brake.?pad|brakepad/i.test(nm) || (/brake/i.test(nm) && !/disc|disk|rotor/i.test(nm));
+      const key = (stationary ? 'fixed|' : 'spin|') + o.material.uuid;
+      if (!batches.has(key)) batches.set(key, { stationary, mat: fixMat(o.material), geos: [] });
+      batches.get(key).geos.push(g);
     }
+    for (const batch of batches.values()) (batch.stationary ? fixed : spin).push({ geo: mergeGeos(batch.geos), mat: batch.mat });
     return { center: c, radius: r, spin, fixed };
   }) : null;
   const bb = new THREE.Box3(), bbNoMirror = new THREE.Box3();
