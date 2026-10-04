@@ -92,7 +92,7 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
     $('result-pay').textContent=r.ok?`+${money(r.reward.cash)} / +${r.reward.xp} XP${r.reward.rankUp?' · RANK UP!':''}`:(r.job.failText||'No entry fee. Try again when you’re ready.');
     onPause();
   }
-  function sample(){return {x:car.x,z:car.z,y:car.y,speed:Math.hypot(car.vx,car.vz),slip:car.slipDeg,air:car.air,surface:car.surface,damage:getDamage(),wanted:getWanted()};}
+  function sample(){return {x:car.x,z:car.z,y:car.y,speed:Math.hypot(car.vx,car.vz),slip:car.slipDeg,air:car.air,surface:car.surface,damage:getDamage(),wanted:getWanted(),onFoot:!!getCrime?.()?.onFoot};}
   engine.resume(jobs,sample());
   function update(dt){
     engine.update(dt,sample());uiClock+=dt;

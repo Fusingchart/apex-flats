@@ -184,7 +184,9 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
     for (const v of S.wrecked) if (v.state !== 'wreck') S.wrecked.delete(v);
 
     // a known face: with a big enough bounty, any cop who gets a good look at you starts a chase
-    if (!S.level && S.bounty >= 300) {
+    // recently got away: any cop who gets a good look at you in the next minute or two picks the chase back up
+    S.knownT = Math.max(0, (S.knownT || 0) - dt);
+    if (!S.level && S.knownT > 0) {
       const close = witnesses(60);
       S.knowT = close.length || (eyes && eyes(30)) ? S.knowT + dt : 0;
       if (S.knowT > 1.5) { S.knowT = 0; raise(1, 'Recognised', 0); }
@@ -255,10 +257,11 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
         }
         S.evadeT += dt * (out ? 1.6 : 0.4);
         if (S.evadeT > 6 + 3.5 * S.level) {
-          const earned = Math.round(Math.min(S.bounty, PAYOUT[S.maxLevel || S.level]));
-          onEscaped(earned, S.maxLevel || S.level); S.maxLevel = 0;
+          const earned = Math.round(Math.min(S.bounty, PAYOUT[S.maxLevel || S.level])), earnedStars = S.maxLevel || S.level;
+          onEscaped(earned, earnedStars); S.maxLevel = 0;
           say('Evaded', earned ? `${money(earned)} banked` : 'Lay low for a while', 3000, 'blue');
-          S.level = 0; S.bounty = 0; S.heat = 0; S.downed = 0; S.evadeT = 0; S.lastSeen = null; P.standDown();
+          S.knownT = 60 + 30 * earnedStars; // your face is fresh in their minds for a while
+          S.level = 0; S.bounty = 0; S.heat = 0; S.downed = 0; S.evadeT = 0; S.lastSeen = null; S.reports.length = 0; P.standDown();
         }
       }
       // three stars and up: roadblocks on the road ahead

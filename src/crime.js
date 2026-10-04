@@ -321,7 +321,7 @@
       if (v.driverMesh) v.driverMesh.visible = false;
       const side = v.x + Math.cos(v.h) * 1.35, z = v.z - Math.sin(v.h) * 1.35;
       const g = figure(scene, !!v.police, 0.95, Math.random() + 0.01);
-      const ped = { mesh: g, x: side, z, y: city.heightAt(side, z, v.y), vx: Math.cos(v.h) * 3.5, vz: -Math.sin(v.h) * 3.5, hp: 45, alive: true, flee: true, t: 0, phase: Math.random() * 6.28, cop: !!v.police };
+      const ped = { mesh: g, x: side, z, y: city.heightAt(side, z, v.y), vx: Math.cos(v.h) * 3.5, vz: -Math.sin(v.h) * 3.5, hp: v.police ? 100 : 45, alive: true, flee: !v.police, t: 0, phase: Math.random() * 6.28, cop: !!v.police, gunT: 1.5 };
       g.userData.ped = ped;
       peds.push(ped);
       return ped;
@@ -458,7 +458,7 @@
       avatar.userData.arms[1].rotation.x = aiming ? -1.3 : Math.sin(walkPhase) * 0.32 * gait;
       uiAcc += dt; syncProxy(); updateMarker();
       if (uiAcc >= 0.1) { mark(uiAcc); uiAcc = 0; if (status) status.textContent = statusText(); }
-      if (fireHeld) fire();
+      if (fireHeld && dt > 0) fire(); // never from a paused frame (menus)
     }
     // runs every frame whether you're on foot or driving: pedestrians, run-overs, parked cars
     // Officers on foot: out of a stopped cruiser, they run you down, shoot from two stars (or if you're armed) and
@@ -473,6 +473,7 @@
       }
       if (v.driverMesh) v.driverMesh.visible = false;
       if (v.state === 'pursue') v.state = 'halt';
+      v.staged = true; // traffic keeps a staged cruiser while you're near, so its crew has something to go back to
     }
     function copStep(p, i, step, driving) {
       const L = police.state.level, dx = player.x - p.x, dz = player.z - p.z, d = Math.hypot(dx, dz) || 1;
@@ -523,6 +524,13 @@
       }
       if (pedAcc < 0.05) return;
       const step = pedAcc; pedAcc = 0;
+      // you've driven off: the crew close to their cruiser jump back in and it rejoins the chase
+      if (police.state.level > 0 && driving && carSpeed > 6) for (const v of traffic.police.units()) {
+        if (!v.deployed || v.state !== 'halt' || Math.hypot(v.x - player.x, v.z - player.z) < 40) continue;
+        for (let i = peds.length - 1; i >= 0; i--) { const q = peds[i]; if (q.car === v && q.alive && Math.hypot(q.x - v.x, q.z - v.z) < 25) { scene.remove(q.mesh); peds.splice(i, 1); } }
+        v.deployed = false; v.staged = false; if (v.driverMesh) v.driverMesh.visible = true;
+        traffic.police.startPursuit(v);
+      }
       if (police.state.level > 0) for (const v of traffic.police.units()) {
         if (v.deployed || (v.state !== 'pursue' && v.state !== 'block')) continue;
         const d = Math.hypot(v.x - player.x, v.z - player.z);

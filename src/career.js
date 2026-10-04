@@ -46,6 +46,8 @@ function createMissionEngine(career,onResult=()=>{}) {
     const moved=Math.hypot(s.x-a.last.x,s.z-a.last.z);a.last={x:s.x,z:s.z};
     if(!Number.isFinite(moved)||moved>Math.max(10,dt*150))return finish(false,'Run interrupted by relocation');
     a.distance+=moved;
+    // checkpoints, clean miles, drift points and cargo need a car: on foot only the clock (and an escape) moves
+    if(s.onFoot&&a.job.type!=='escape'){if(s.wanted>0)a.sawWanted=true;a.hold=0;a.lastDamage=s.damage||0;saveT+=dt;if(saveT>=2){saveT=0;persist();}return;}
     const dmg=(s.damage||0)-a.lastDamage,hit=dmg>.002;a.lastDamage=s.damage||0;
     if(hit&&a.job.cargo){a.integrity=Math.max(0,a.integrity-Math.min(.35,dmg*(a.job.fragile?.6:.35)));if(a.job.fragile&&a.integrity<.5)return finish(false,'Cargo destroyed');}
     if(a.job.type==='clean'&&hit){a.clean=0;}

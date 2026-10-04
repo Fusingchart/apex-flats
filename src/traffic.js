@@ -320,7 +320,7 @@ window.createTraffic = function (ctx) {
       stillT: 0, lcEnd: 0, lcCool: now + 2, throttle: 0.2, brake: 0, ignore: null, blockedBy: null, slope: 0 });
     v.driverMesh.visible = true; v.crimeTaken = false;
     // chase bookkeeping from this car's last life (pooled): start clean
-    v.prog = null; v.progAt = 0; v.slowT = 0; v.farT = 0; v.deployed = false; v.struckT = -99; v.badT = 0; v.progT = 0; v.progPos = null;
+    v.prog = null; v.progAt = 0; v.slowT = 0; v.farT = 0; v.deployed = false; v.staged = false; v.struckT = -99; v.badT = 0; v.progT = 0; v.progPos = null;
     v.px = v.x; v.pz = v.z; v.ph = v.h;
     const sp = L.speed * 0.85;
     v.vx = Math.sin(v.h) * sp; v.vz = Math.cos(v.h) * sp;
@@ -338,7 +338,7 @@ window.createTraffic = function (ctx) {
       if (v.state === 'idle') continue;
       const d = Math.hypot(v.x - px, v.z - pz);
       if (v.state === 'pursue' || v.state === 'block') { if (d > (v.state === 'block' ? 500 : 900)) deactivate(v); continue; }
-      if (d > DESPAWN || (v.state === 'wreck' && now - v.crashT > 20 && d > 110) || (v.stillT > 40 && d > 90) || (v.state === 'halt' && ((v.stillT > 8 && d > 60) || !inView(v.x, v.y, v.z)))) deactivate(v);
+      if (d > DESPAWN || (v.state === 'wreck' && now - v.crashT > 20 && d > 110) || (v.stillT > 40 && d > 90) || (v.state === 'halt' && !(v.staged && d < 150) && ((v.stillT > 8 && d > 60) || !inView(v.x, v.y, v.z)))) deactivate(v);
     }
     city.cellsNear(px, pz, SPAWN_MAX, cellsTmp);
     let expected = 0;

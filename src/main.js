@@ -1075,7 +1075,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('mousedown', e => {
-  if (crime && crime.onFoot && !e.target.closest?.('button, a, select, input, .overlay')) {
+  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen;
+  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay')) {
     crime.mouseButton(e.button, true);
     if (document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock?.(); if (r?.catch) r.catch(() => {}); } catch (err) { /* lock unavailable: look still follows the mouse */ } }
     e.preventDefault();
@@ -1490,7 +1491,12 @@ addEventListener('resize', resize); resize();
 let started = false;
 const startEl = el('start');
 // Car picker: the same cards serve the start screen and the in-game garage (V)
-function clearDrivingInput() { for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = 0; }
+function clearDrivingInput() {
+  for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = 0;
+  // a menu opening also lets go of the trigger and hands the pointer back so its buttons can be clicked
+  crime?.mouseButton(0, false); crime?.mouseButton(2, false);
+  if (document.pointerLockElement) document.exitPointerLock?.();
+}
 function renderCards(container, onPick) {
   container.innerHTML = '';
   const starting = container.id === 'start-cards';

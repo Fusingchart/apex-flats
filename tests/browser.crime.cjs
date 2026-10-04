@@ -156,9 +156,15 @@ const { chromium } = require('playwright'), assert = require('node:assert/strict
     const ok = apex.missions.begin(j);
     const a = apex.missions.engine.active, first = a.job.points[0];
     const out = { ok, moved: Math.hypot(apex.crime.position.x - f.x, apex.crime.position.z - f.z), firstFromHere: Math.hypot(first.x - f.x, first.z - f.z), firstFromStart: Math.hypot(first.x - apex.city.start.x, first.z - apex.city.start.z) };
-    apex.missions.engine.cancel(); document.getElementById('mission-result').hidden = true;
     return out;
   });
+  // ...but its checkpoints need a car: standing on one on foot doesn't count
+  const footStage = await p.evaluate(() => new Promise(res => { const q = apex.missions.engine.active.job.points[0];
+    // walk there in short hops (a single jump would count as a relocation and end the run)
+    const hop = () => { const f = apex.crime.position, d = Math.hypot(q.x - f.x, q.z - f.z); if (d < 1) return settle(); const k = Math.min(1, 4 / d); apex.crime.setFootPosition({ x: f.x + (q.x - f.x) * k, z: f.z + (q.z - f.z) * k, y: q.y, h: 0 }); setTimeout(hop, 120); };
+    const settle = () => setTimeout(() => { const st = apex.missions.engine.active?.stage; apex.missions.engine.cancel(); document.getElementById('mission-result').hidden = true; res(st); }, 1500); hop(); }));
+  console.log('stage after standing on a checkpoint on foot', footStage);
+  assert.equal(footStage, 0, 'contract checkpoints need a car');
   console.log('contract', job);
   assert.ok(job.ok && job.moved < 0.5 && job.firstFromHere < 400, 'contract starts here, no teleport');
   await p.screenshot({ path: '/tmp/apex-crime.png' });
