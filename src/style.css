@@ -112,6 +112,12 @@ button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allo
 /* Apex Holdings (business panel) */
 #empire{align-items:start;background:rgba(14,15,21,.97)}#empire .mission-content>p{max-width:850px;line-height:1.7;color:var(--dim)}
 .biz-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:22px 0}.biz-stats>div{padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:#1d1c24;display:grid;gap:4px;text-align:left}.biz-stats small{font:10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:var(--dim)}.biz-stats b{font:600 24px 'Chakra Petch',sans-serif;color:var(--amber)}.biz-stats em{font-size:10px;font-style:normal;color:var(--dim)}
+#crime-status { position: fixed; right: 22px; bottom: 30px; padding: 9px 13px; background: rgba(18,16,24,.78); border: 1px solid var(--line); border-radius: 7px; font: 600 14px var(--mono); color: var(--ink); text-shadow: 0 2px 6px #000; z-index: 4; }
+#crime-prompt { position: fixed; left: 50%; bottom: 24%; transform: translateX(-50%); padding: 10px 16px; background: rgba(18,16,24,.82); border: 1px solid var(--line); border-radius: 7px; color: var(--ink); font: 600 14px var(--mono); text-align: center; text-shadow: 0 2px 6px #000; z-index: 4; }
+.on-foot #cluster, .on-foot #left { display: none; }
+#crosshair { display: none; position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); outline: 1.5px solid rgba(255,255,255,.55); outline-offset: 5px; pointer-events: none; z-index: 4; }
+.on-foot #crosshair { display: block; }
+@media(max-width:600px){#crime-status{right:10px;bottom:16px;font-size:11px}#crime-prompt{bottom:20%;font-size:11px;max-width:86vw}}
 .biz-h{font:600 22px 'Chakra Petch',sans-serif;margin:28px 0 12px;text-align:left}.biz-h small{font-size:13px;color:var(--dim);margin-left:8px}
 .biz-office,.biz-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .biz-card{padding:18px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(130deg,#29262e,#1b1b23);display:flex;flex-direction:column;gap:8px;text-align:left}.biz-card.owned{border-color:rgba(255,181,71,.45)}.biz-card.raided{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
@@ -126,3 +132,25 @@ button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allo
 #biz-raid{position:fixed;top:92px;left:50%;transform:translateX(-50%);z-index:3;padding:7px 14px;border-radius:7px;background:rgba(255,90,78,.9);color:#fff;font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.1em}
 @media(max-width:1000px){.biz-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.biz-office,.biz-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#biz-raid{top:150px}}
 @media(max-width:600px){.biz-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.biz-stats b{font-size:19px}.biz-office,.biz-grid,.biz-goals{grid-template-columns:1fr}#biz-prompt{bottom:200px;font-size:11px;width:calc(100% - 32px);text-align:center}}
+/* Busted / wasted banner and the red flash when you're hit */
+#banner { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; opacity: 0; transition: opacity 0.4s; pointer-events: none; z-index: 6; background: radial-gradient(ellipse at center, rgba(0,0,0,0.15), rgba(0,0,0,0.55)); }
+#banner.show { opacity: 1; }
+#banner b { font: 700 86px/1 var(--display); letter-spacing: 0.12em; color: var(--red); text-shadow: 0 4px 24px rgba(0,0,0,0.8); }
+#banner span { font: 500 16px/1 var(--mono); color: var(--ink); text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
+#hurt { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; background: radial-gradient(ellipse at center, rgba(160,0,0,0) 45%, rgba(170,10,10,0.75)); }
+#crime-status:not([hidden]) { display: block; }
+/* Marlowe's jobs and Apex Customs */
+#story-job { position: fixed; top: 118px; right: 380px; z-index: 2; width: 300px; padding: 16px; }
+#story-job .job-meta { color: #ffcf3a; }
+#story-job h3 { font: 600 22px 'Chakra Petch', sans-serif; margin: 8px 0; }
+#story-job p { font-size: 12px; line-height: 1.6; margin: 0; color: var(--ink); }
+#story-arrow { display: inline-block; font-size: 22px; color: #ffcf3a; }
+#story-brief, #shop { z-index: 8; }
+#story-brief .eyebrow { color: #ffcf3a; }
+#story-brief .brief-text { white-space: pre-line; line-height: 1.7; color: var(--dim); text-align: left; }
+#shop .eyebrow { color: #4fa3ff; }
+#shop-body { display: grid; gap: 10px; margin-top: 18px; text-align: left; }
+#shop-prompt { position: fixed; left: 50%; bottom: 170px; transform: translateX(-50%); padding: 10px 16px; z-index: 3; font-size: 13px; }
+#shop-prompt b { color: #4fa3ff; margin-right: 8px; }
+#shop-prompt kbd { color: #4fa3ff; }
+@media (max-width: 1000px) { #story-job { top: 300px; left: 16px; right: auto; width: 260px; } }

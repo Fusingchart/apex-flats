@@ -42,7 +42,7 @@ async function ensureModel(id) {
 await Promise.all(catalog.slice(0, 6).map(c => ensureModel(c.id)));
 let storage; try { storage = localStorage; } catch(e) {}
 const career = createCareer(catalog, storage);
-let missions = null, empire = null, selectingCar = false, collisionTotal = 0;
+let missions = null, empire = null, crime = null, street = null, selectingCar = false, collisionTotal = 0, rideOwned = true;
 // if the photo's sun sits very low, lift it a few degrees for gameplay so streets aren't all in shadow
 const sunDir = SKY.sunDir.clone();
 { const el = Math.asin(sunDir.y), lift = Math.max(el, 0.2), hz = Math.cos(lift) / Math.hypot(sunDir.x, sunDir.z); sunDir.set(sunDir.x * hz, Math.sin(lift), sunDir.z * hz).normalize(); }
@@ -157,10 +157,17 @@ const SPLIT = { rwd: [0, 1], fwd: [1, 0], awd: [0.42, 0.58] };
 function physicsOf(pr) {
   return {
     mass: pr.mass, inertia: pr.inertia, a: 1.25, b: 1.35, h: pr.cg, R: pr.wheel || 0.33,
-    maxSteer: pr.steer, assist: pr.assist ?? 0.5, rollFront: pr.rollFront ?? (pr.drive === 'fwd' ? 0.6 : pr.drive === 'rwd' ? 0.5 : 0.55), brake: pr.brake, handbrake: 7000, drag: pr.drag, roll: 14, grip: pr.grip,
+    maxSteer: pr.steer, assist: Math.max(0.82, pr.assist ?? 0.5), rollFront: pr.rollFront ?? (pr.drive === 'fwd' ? 0.6 : pr.drive === 'rwd' ? 0.5 : 0.55), brake: pr.brake, handbrake: 7000, drag: pr.drag, roll: 14, grip: pr.grip * 1.08,
     gears: [-3.3, 0, ...pr.gears], diff: pr.diff, eff: 0.88, idle: pr.idle, redline: pr.redline, shiftUp: pr.redline - 500,
     front: SPLIT[pr.drive][0], rear: SPLIT[pr.drive][1],
   };
+}
+// How common each car is on the street: runabouts everywhere, supercars once in a blue moon
+const rarity = pr => { const v = pr.price || 0; return v <= 15000 ? 6 : v <= 30000 ? 3 : v <= 60000 ? 1.2 : v <= 100000 ? 0.35 : 0.12; };
+function pickPreset(list = PRESETS, r = Math.random) {
+  let sum = 0; for (const pr of list) sum += rarity(pr);
+  let x = r() * sum; for (const pr of list) { x -= rarity(pr); if (x <= 0) return pr; }
+  return list[list.length - 1];
 }
 let P = physicsOf(PRESETS[0]), L = P.a + P.b, TORQUE = [];
 function torqueAt(rpm) {
@@ -181,7 +188,7 @@ scene.add(carGroup);
 // Beams through the passenger cell are ~3x stronger than the crumple zones; floor rails are stiffer still.
 const softConfig = (top, halfW = 0.9, length = 4.44) => ({
   min: [-halfW, 0.2, -length / 2], max: [halfW, top, length / 2], dims: [5, 4, 10],
-  nodeMass: 4, axial: 2.6e5, yieldForce: 8000, minRatio: 0.3, tearStrain: 0.6, nodeRadius: 0.07, iterations: 3, ...(window.TUNE || {}),
+  nodeMass: 4, axial: 2.6e5, yieldForce: 18000, minRatio: 0.3, tearStrain: 0.6, nodeRadius: 0.07, iterations: 3, ...(window.TUNE || {}),
   pinned: (i, j, k) => j === 0 && i >= 1 && i <= 3 && k >= 3 && k <= 6,
   // [min z, max z, min |x|]: the engine bay and boot fold up against the cell, doors stop at the seats
   bounds: (x, y, z) => [
@@ -284,14 +291,14 @@ function resetCar(pose = city.start) {
     steer: 0, ax: 0, ay: 0, gear: 2, auto: true, shiftT: 0, rpm: P.idle,
     throttle: 0, brake: 0, hb: 0, spin: 0, skidR: 0, skidF: 0, frontRot: 0, rearRot: 0,
     pitch: 0, pitchV: 0, rollA: 0, rollV: 0, power: 0, slipDeg: 0, onSand: false, limiter: false,
-    px: pose.x, pz: pose.z, ph: pose.h, m: P.mass, I: P.inertia, surface: 'asphalt'
+    px: pose.x, pz: pose.z, ph: pose.h, m: P.mass, I: P.inertia, surface: 'asphalt', onFoot: false, armed: false
   });
 }
 
 const sat = a => Math.sin(1.65 * Math.atan(9 * a)); // Pacejka-ish tyre curve
 
 // Damage that feeds back into the driving model (updated from the lattice once per frame)
-const harm = { toe: 0, frontGrip: 1, rearGrip: 1, drag: 0, engine: 0, power: 1 };
+const harm = { toe: 0, frontGrip: 1, rearGrip: 1, drag: 0, engine: 0, power: 1, bullet: 0, tyres: 1 };
 
 function stepCar(dt, inp) {
   car.px = car.x; car.pz = car.z; car.ph = car.h;
@@ -341,7 +348,7 @@ function stepCar(dt, inp) {
   else target = Math.max(rpmWheel, P.idle + car.throttle * 2400 * (rpmWheel < 2600 ? 1 : 0)); // clutch slip at launch
   car.rpm = clamp(lerp(car.rpm, target, Math.min(1, dt * 14)), P.idle * 0.85, P.redline + 150);
   car.limiter = car.rpm >= P.redline;
-  let torque = car.limiter || car.shiftT > 0 ? 0 : torqueAt(car.rpm) * car.throttle * harm.power;
+  let torque = car.limiter || car.shiftT > 0 ? 0 : torqueAt(car.rpm) * car.throttle * harm.power * (1 - harm.bullet);
   if (car.throttle < 0.05 && car.gear !== 1 && rpmWheel > P.idle) torque = -30 - car.rpm * 0.012; // engine braking
   let drive = torque * ratio * P.eff / P.R;
   if (car.spin > 0.35 && !(car.hbT > 0) && speed < 18 && drive > 0) drive *= 0.72; // traction control on launch
@@ -391,7 +398,7 @@ function stepCar(dt, inp) {
     const aT = Math.atan2(wy, Math.max(Math.abs(wx), 1.0));
     car.alpha[i] += (aT - car.alpha[i]) * Math.min(1, (Math.abs(wx) + 2) * dt / 0.35);
     const sens = 1 - 0.1 * (Fz[i] / Fz0 - 1);                          // load sensitivity
-    const muW = mu * sens * (front ? harm.frontGrip : harm.rearGrip * (car.hb > 0.5 ? 0.6 : 1));
+    const muW = mu * sens * harm.tyres * (front ? harm.frontGrip : harm.rearGrip * (car.hb > 0.5 ? 0.6 : 1));
     const maxW = muW * Fz[i];
     // longitudinal: drive (open differential splits the axle's torque evenly), brakes, handbrake
     let Fx = drive * (front ? P.front : P.rear) / 2 + Fbrake * (front ? 0.32 : 0.18) + (front ? 0 : Fhb / 2);
@@ -410,7 +417,7 @@ function stepCar(dt, inp) {
   }
   const Ffx = Flong; // for the skid/lock bookkeeping below
   car.spin = lerp(car.spin, clamp(Math.max(spinR, spinF), 0, 1.5), Math.min(1, dt * 10));
-  Flong += -P.drag * vLong * Math.abs(vLong) - P.roll * vLong * ((car.onSand ? 3 : 1) + harm.drag) * gnd - (wet ? P.mass * 1.6 * vLong : 0)
+  Flong += -P.drag * vLong * Math.abs(vLong) - P.roll * vLong * ((car.onSand ? 3 : 1) + harm.drag + (1 - harm.tyres) * 14) * gnd - (wet ? P.mass * 1.6 * vLong : 0)
     - P.mass * 9.81 * car.slope * gnd; // gravity along a ramp
   Flat += -0.6 * vLat * Math.abs(vLat) - P.mass * 9.81 * car.bank * gnd; // and across a side slope
 
@@ -827,7 +834,7 @@ function repairCar() {
   for (const pt of kit.parts) if (pt.broken) restorePart(pt);
   soft.reset(); soft.refreshed = -1;
   lost.length = 0; glassBroken = false;
-  Object.assign(harm, { toe: 0, frontGrip: 1, rearGrip: 1, drag: 0, engine: 0, power: 1 });
+  Object.assign(harm, { toe: 0, frontGrip: 1, rearGrip: 1, drag: 0, engine: 0, power: 1, bullet: 0, tyres: 1 });
   for (const sh of shards) { sh.m.visible = false; sh.rest = true; }
   Object.assign(crash, { active: false, peakG: 0, g: 0, work: 0, fxWork: 0, hard: 0, slip: 0, glass: 0, shown: 0, points: [] });
 }
@@ -859,7 +866,7 @@ function applyDamage() {
     if (soft.sample(...pt.anchor, SAMPLE)[3] > pt.limit) breakPart(pt);
   }
   if (!glassBroken) for (const pr of CABIN_PROBES) {
-    if (soft.sample(pr[0], pr[1], pr[2], SAMPLE)[3] > 0.1) {
+    if (soft.sample(pr[0], pr[1], pr[2], SAMPLE)[3] > 0.14) {
       glassBroken = true; lost.push('Glass');
       crash.glass = 1;
       const at = toWorld(pr[0], pr[1], pr[2]).clone();
@@ -897,9 +904,10 @@ function crashEffects(dt) {
   if (crash.g > 4) crash.shake = Math.max(crash.shake, Math.min(1, crash.g / 30));
   crash.shake *= Math.exp(-dt * 6);
   // a cracked radiator steams, a wrecked engine smokes
-  if (harm.engine > 0.12 && rand() < 0.25 + harm.engine * 0.5) {
+  const smokeK = Math.max(harm.engine, harm.bullet);
+  if (smokeK > 0.12 && rand() < 0.25 + smokeK * 0.5) {
     const w = toWorld((rand() - 0.5) * 0.6, 0.95, 1.5 + rand() * 0.4);
-    puff(w.x, w.z, 0.2 + harm.engine * 0.5, false, w.y, harm.engine > 0.55 ? '#45403f' : '#e9e6e2');
+    puff(w.x, w.z, 0.2 + smokeK * 0.5, false, w.y, smokeK > 0.55 ? '#45403f' : '#e9e6e2');
   }
 }
 
@@ -1038,18 +1046,26 @@ const camModes = ['Chase', 'Far', 'Bumper', 'Orbit'];
 let camMode = 0;
 addEventListener('keydown', e => {
   if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
-  const menuOpen = !started || !el('garage').hidden || missions?.paused || empire?.open;
-  if (menuOpen && !['Escape','KeyJ','KeyV','KeyB'].includes(e.code)) return;
+  const menuOpen = !started || !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen;
+  if (menuOpen && !['Escape','KeyJ','KeyV','KeyB','Enter'].includes(e.code)) return;
   if (e.repeat) { if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); return; }
   keys[e.code] = true;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (crime && crime.onFoot) {
+    if (e.code === 'KeyF') { e.preventDefault(); crime.interact(); }
+    if (e.code === 'KeyG') { e.preventDefault(); crime.breakWindow(); }
+    if (/^Digit[1-4]$/.test(e.code)) crime.setWeapon(parseInt(e.code.slice(5)) - 1);
+  }
+  if (e.code === 'KeyF' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) exitCar();
   if (e.code === 'KeyC') camMode = (camMode + 1) % camModes.length;
-  if (e.code === 'KeyR' && started && !missions?.paused && el('garage').hidden) respawn(e.shiftKey);
+  if (e.code === 'KeyR' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) respawn(e.shiftKey);
   if (e.code === 'KeyV') toggleGarage();
   if (e.code === 'KeyJ') { empire?.toggle(false); missions?.toggle(); }
   if (e.code === 'KeyB' && started) empire?.toggle();
   if (e.code === 'Tab') { e.preventDefault(); bigMap.open = !bigMap.open; el('bigmap').hidden = !bigMap.open; }
-  if (e.code === 'KeyZ' && !missions?.engine.active) timeScale = timeScale === 1 ? 0.25 : 1;
+  if (e.code === 'KeyZ' && !missions?.engine.active && !street?.active && !police.state.level) timeScale = timeScale === 1 ? 0.25 : 1;
+  // Enter opens the shop, but never steals Enter from a focused button or another open menu
+  if (e.code === 'Enter' && started && street?.shopAt && !e.target.closest?.('button, a, select, input') && (street.shopOpen || !menuOpen)) { e.preventDefault(); street.openShop(); }
   if (e.code === 'KeyM') audio.muted = !audio.muted;
   if (e.code === 'KeyH') document.getElementById('keys').classList.toggle('off');
   if (e.code === 'KeyE') shift(1);
@@ -1058,12 +1074,93 @@ addEventListener('keydown', e => {
   if (!started && !/^Digit/.test(e.code)) start();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('mousedown', e => {
+  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen;
+  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay')) {
+    crime.mouseButton(e.button, true);
+    if (document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock?.(); if (r?.catch) r.catch(() => {}); } catch (err) { /* lock unavailable: look still follows the mouse */ } }
+    e.preventDefault();
+  }
+});
+addEventListener('mouseup', e => {
+  if (crime && crime.onFoot) crime.mouseButton(e.button, false);
+});
+addEventListener('mousemove', e => {
+  if (!crime || !crime.onFoot) return;
+  // locked: full mouse look; unlocked (lock refused or not yet granted): the camera still follows the mouse
+  const k = document.pointerLockElement === canvas ? 1 : 0.6;
+  crime.mouseMove((e.movementX || 0) * k, (e.movementY || 0) * k);
+});
+addEventListener('contextmenu', e => { if (crime?.onFoot) e.preventDefault(); });
+function exitCar() {
+  if (!started || crime?.onFoot) return;
+  const carPose = { x: car.x, y: car.y, z: car.z, h: car.h };
+  // leave the car as it is: a copy of the (dented) body, with its crash structure saved for when you get back in
+  const rec = crime.addParked(parkedCopy(), preset, carPose, rideOwned && career.state.owned.includes(preset.id), false);
+  rec.damage = damageSnapshot(); rec.mine = true;
+  let pose = { x: car.x + Math.cos(car.h) * 2, z: car.z - Math.sin(car.h) * 2, y: car.y, h: car.h };
+  if (!city.walkAt(pose.x, pose.z) && city.walkAt(car.x - Math.cos(car.h) * 2, car.z + Math.sin(car.h) * 2)) pose = { x: car.x - Math.cos(car.h) * 2, z: car.z + Math.sin(car.h) * 2, y: car.y, h: car.h };
+  car.vx = car.vz = car.w = 0;
+  crime.startAt(pose);
+  carGroup.visible = false;
+}
+// The car you just got out of, frozen as it is: dents, missing parts and all (geometry copied, lights left out)
+function parkedCopy() {
+  const g = carGroup.clone(true), own = [], drop = [];
+  g.traverse(o => { if (o.isLight) drop.push(o); else if (o.isMesh && o.parent && o.parent.parent === g) { o.geometry = o.geometry.clone(); own.push(o.geometry); } });
+  for (const o of drop) o.parent.remove(o);
+  g.rotation.set(0, 0, 0); g.children[0].rotation.set(0, 0, 0); g.children[0].position.y = 0.02;
+  g.visible = true;
+  g.userData.dispose = () => { for (const x of own) x.dispose(); };
+  return g;
+}
+// The crash structure (lattice nodes and beams) of the car you drive, or of a traffic car, to carry over
+function damageSnapshot(src = soft) {
+  src.refresh?.();
+  return { rest: src.rest, p: src.p.slice(), len: src.len.slice(), torn: src.torn.slice(), scuff: src.scuff.slice(), tornCount: src.tornCount || 0,
+    bullet: src === soft ? harm.bullet : 0, tyres: src === soft ? harm.tyres : 1, total: src === soft ? collisionTotal : 0 };
+}
+function restoreDamage(snap) {
+  if (!snap || snap.p.length !== soft.p.length || snap.len.length !== soft.len.length) return false;
+  for (let i = 0; i < soft.rest.length; i++) if (Math.abs(soft.rest[i] - snap.rest[i]) > 1e-3) return false;
+  soft.p.set(snap.p); soft.pp.set(snap.p); soft.u.fill(0); soft.len.set(snap.len); soft.torn.set(snap.torn); soft.scuff.set(snap.scuff);
+  soft.tornCount = snap.tornCount; soft.version = (soft.version || 0) + 1; soft.refreshed = -1; soft.sleeping = true;
+  soft.refresh(); applyDamage();
+  // parts that were already gone: drop them quietly instead of throwing them off again
+  for (const f of flying) scene.remove(f.m);
+  flying.length = 0;
+  for (const sh of shards) { sh.m.visible = false; sh.rest = true; }
+  harm.bullet = snap.bullet || 0; harm.tyres = snap.tyres ?? 1;
+  Object.assign(crash, { active: false, peakG: 0, g: 0, work: 0, fxWork: 0, hard: 0, slip: 0, glass: 0, shown: 0, points: [] });
+  return true;
+}
+// a static copy of a car (no physics): civilian parked cars
+function makeCarMesh(pr, load = true) {
+  const model = CARMODELS.find(m => m.id === pr.model);
+  if (!model) { if (load) ensureModel(pr.model); return null; }
+  const kit = buildModelCar(model, { paint: pr.paint, paint2: pr.paint2 });
+  const g = new THREE.Group(), b = new THREE.Group(); b.position.y = 0.02; g.add(b);
+  const sharedGeo = new Set(model.body.map(x => x.geo)), sharedMat = new Set(model.body.map(x => x.mat));
+  const ownGeo = new Set(), ownMat = new Set();
+  for (const { mesh } of kit.meshes) {
+    mesh.castShadow = true; b.add(mesh);
+    if (!sharedGeo.has(mesh.geometry)) ownGeo.add(mesh.geometry);
+    if (!sharedMat.has(mesh.material)) ownMat.add(mesh.material);
+  }
+  if (kit.makeWheel) for (let i = 0; i < 4; i++) { const w = kit.makeWheel(i), s = new THREE.Group(); s.position.copy(w.center); s.add(w.spin, w.fixed); g.add(s); }
+  // free only what this copy created (paint/light materials, indicator lenses); model geometry is shared
+  g.userData.dispose = () => { for (const x of ownGeo) x.dispose(); for (const x of ownMat) x.dispose(); };
+  return g;
+}
+
 let timeScale = 1;
 // Back on the road: repair and drop onto the nearest lane (Shift: also tidy up knocked-over props)
 function respawn(tidy) {
   missions?.engine.cancel('Recovery ended the contract');
   const pose = city.nearestLanePose(car.x, car.z, car.y) || city.start;
-  resetCar(pose); repairCar(); for (const k in lastMark) lastMark[k] = null;
+  // back on the road, dents and all: repairs are Apex Customs' business
+  const keep = { ...harm }; resetCar(pose); Object.assign(harm, keep);
+  for (const k in lastMark) lastMark[k] = null;
   if (tidy) resetLoose();
   camSnap = true;
 }
@@ -1220,7 +1317,13 @@ function drawMap() {
     }
     g.stroke();
   }
-  missions?.drawMap(g, X, Y); empire?.drawMap(g, X, Y);
+  missions?.drawMap(g, X, Y); empire?.drawMap(g, X, Y); street?.drawMap(g, X, Y);
+  // where the police are searching for you: get outside the circle to lose them
+  const PS = police.state;
+  if (PS.level && !PS.seen && PS.lastSeen) {
+    g.strokeStyle = (performance.now() / 400 | 0) % 2 ? 'rgba(255,70,70,0.75)' : 'rgba(80,120,255,0.75)'; g.fillStyle = 'rgba(255,70,70,0.08)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(X(PS.lastSeen.x, PS.lastSeen.z), Y(PS.lastSeen.x, PS.lastSeen.z), police.zoneR() * scale, 0, TAU); g.fill(); g.stroke();
+  }
   for (const v of traffic.vehicles) {
     if (v.state === 'idle') continue;
     const x = X(v.x, v.z), y = Y(v.x, v.z);
@@ -1271,7 +1374,7 @@ function drawBigMap() {
     bigMap.base = off;
   }
   g.drawImage(bigMap.base, 0, 0);
-  missions?.drawMap(g, x => X(x), (x,z) => Y(z)); empire?.drawMap(g, x => X(x), (x,z) => Y(z));
+  missions?.drawMap(g, x => X(x), (x,z) => Y(z)); empire?.drawMap(g, x => X(x), (x,z) => Y(z)); street?.drawMap(g, x => X(x), (x,z) => Y(z));
   g.fillStyle = 'rgba(243,236,228,0.85)';
   for (const v of traffic.vehicles) if (v.state !== 'idle') { g.fillStyle = v.police ? '#4f7bff' : 'rgba(243,236,228,0.85)'; g.fillRect(X(v.x) - 1.5, Y(v.z) - 1.5, 3, 3); }
   g.save(); g.translate(X(car.x), Y(car.z)); g.rotate(Math.PI - car.h + Math.PI);
@@ -1388,7 +1491,12 @@ addEventListener('resize', resize); resize();
 let started = false;
 const startEl = el('start');
 // Car picker: the same cards serve the start screen and the in-game garage (V)
-function clearDrivingInput() { for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = 0; }
+function clearDrivingInput() {
+  for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = 0;
+  // a menu opening also lets go of the trigger and hands the pointer back so its buttons can be clicked
+  crime?.mouseButton(0, false); crime?.mouseButton(2, false);
+  if (document.pointerLockElement) document.exitPointerLock?.();
+}
 function renderCards(container, onPick) {
   container.innerHTML = '';
   const starting = container.id === 'start-cards';
@@ -1399,7 +1507,7 @@ function renderCards(container, onPick) {
     const hp = Math.round(pr.peak * pr.redline * 0.8 * TAU / 60 / 1000 * 1.341);
     const b = document.createElement('button');
     b.className = 'card' + (pr === preset ? ' on' : ''); b.dataset.car = pr.id;
-    b.disabled = selectingCar || (!owned && (locked || career.state.cash < pr.price)) || !!missions?.engine.active;
+    b.disabled = selectingCar || (!owned && (locked || career.state.cash < pr.price)) || (!starting && !!missions?.engine.active);
     b.innerHTML = `<img class="car-preview" src="assets/cars/previews/${pr.id}.jpg" alt="" loading="lazy"><span class="sw" style="background:rgb(${pr.paint.map(c => Math.round(Math.pow(c, 1 / 2.2) * 255)).join(',')})"></span>
       <b>${pr.name}</b><i>${pr.kind}</i><span class="spec">${hp} hp · ${pr.mass} kg · ${pr.drive.toUpperCase()}</span><em>${pr.blurb}</em><strong class="car-price">${owned ? (pr === preset ? 'CURRENT · DRIVE' : 'OWNED · DRIVE') : locked ? 'RANK ' + pr.level + ' · $' + pr.price.toLocaleString() : 'BUY · $' + pr.price.toLocaleString()}</strong>`;
     b.addEventListener('click', async e => { e.stopPropagation(); await onPick(pr); }); container.appendChild(b);
@@ -1408,7 +1516,8 @@ function renderCards(container, onPick) {
   el('garage-message').textContent = missions?.engine.active ? 'Finish or abandon your contract before changing cars.' : 'Buying a car unlocks it permanently. Repairs and recovery are free.';
 }
 async function chooseCar(pr) {
-  if (selectingCar || missions?.engine.active || !career.state.owned.includes(pr.id)) return false;
+  if (selectingCar || (started && missions?.engine.active) || !career.state.owned.includes(pr.id)) return false; // a contract resumed from a save still lets you pick a car to start
+  if (started && police?.state.level > 0) { el('garage-message').textContent = 'Lose the police before you call a car.'; return false; }
   selectingCar = true; clearDrivingInput();
   if (!started) { el('loading').hidden = false; el('loading').textContent = 'Loading ' + pr.name + '…'; }
   el('garage-message').textContent = 'Loading ' + pr.name + '…';
@@ -1416,7 +1525,8 @@ async function chooseCar(pr) {
   if (!loaded) { selectingCar = false; el('garage-message').textContent = 'Model could not load. Please try again.'; if (!started) el('loading').textContent = 'Model unavailable. Choose another car or press J to enter with the fallback car.'; return false; }
   el('loading').hidden = true;
   const keep = { x: car.x, z: car.z, h: car.h, y: car.y };
-  buildPlayer(pr); resetCar(keep); repairCar(); applyDamage();
+  buildPlayer(pr); resetCar(keep); repairCar(); applyDamage(); rideOwned = true;
+  crime?.setDriving(); carGroup.visible = true;
   for (const k in lastMark) lastMark[k] = null;
   career.select(pr.id); selectingCar = false; missions?.refresh(); return true;
 }
@@ -1442,8 +1552,8 @@ el('open-garage').onclick = () => { start(); toggleGarage(); };
 el('garage-filter').onchange = () => renderCards(el('garage-cards'), pickGarage);
 addEventListener('blur', clearDrivingInput);
 addEventListener('keydown', e => {
-  if (e.code === 'Escape') { toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
-  if (e.code === 'KeyG' && started && !missions?.paused && el('garage').hidden) { qualityPinned = true; setQuality((quality + 2) % 3); }
+  if (e.code === 'Escape') { street?.closeAll(); toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
+  if (e.code === 'KeyG' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) { qualityPinned = true; setQuality((quality + 2) % 3); }
 });
 function start() {
   if (started) return;
@@ -1458,13 +1568,127 @@ await ensureModel(savedCar.id);
 buildPlayer(savedCar);
 resetCar();
 // AI traffic: a pool of cars that spawn around you, out of sight, in proportion to how busy each road is
-const traffic = createTraffic({ scene, city, rand, nearSolids, localObstacle, player: car, softConfig, camera, max: 44, carModels: CARMODELS });
+const traffic = createTraffic({ scene, city, rand, nearSolids, localObstacle, player: car, softConfig, camera, max: 44, carModels: CARMODELS,
+  pickModel: r => { const pr = pickPreset(PRESETS.filter(q => CARMODELS.some(m => m.id === q.model)), r); return CARMODELS.find(m => m.id === pr?.model) || null; } });
+// A police bullet at you: on foot it's the crime layer's business; in a car it can hit the body, the engine, a
+// tyre or you through the glass. Every shot shows a tracer.
+function carShot(shooter, level) {
+  if (!crime) return;
+  if (crime.onFoot) { crime.copFire(shooter, level); return; }
+  const d = Math.hypot(shooter.x - car.x, shooter.z - car.z), sp = Math.hypot(car.vx, car.vz);
+  const hit = rand() < clamp(0.7 - d * 0.009 - sp * 0.006 + level * 0.04, 0.12, 0.8);
+  const aim = { x: car.x + (rand() - 0.5) * (hit ? 1.4 : 7), y: car.y + 0.6 + rand() * 0.8, z: car.z + (rand() - 0.5) * (hit ? 1.4 : 7) };
+  crime.fx.tracer(shooter.x, (shooter.y || 0) + 1.3, shooter.z, aim.x, aim.y, aim.z);
+  crime.fx.flash(shooter.x, (shooter.y || 0) + 1.3, shooter.z);
+  if (!hit) { crime.fx.impact(aim.x, city.heightAt(aim.x, aim.z, car.y) + 0.05, aim.z, 'dust'); return; }
+  crime.fx.impact(aim.x, aim.y, aim.z, 'spark');
+  harm.bullet = Math.min(0.9, harm.bullet + 0.025);
+  if (harm.bullet > 0.6 && rand() < 0.1 && harm.tyres > 0.6) { harm.tyres = 0.6; crime.say('Tyre shot out', 1.6); }
+  if (rand() < 0.25) { crime.hurtDriver(4 + level); crime.fx.flashDamage(); } // the body and the engine soak most of it
+  if (audio.ctx && !audio.muted) pop(audio.ctx.currentTime, 0.35);
+}
 // Police: patrols, wanted levels, pursuits and bounties (src/police.js)
-const police = createPolice({ traffic, city, player: car, audio, scene, onBusted: fine => { const paid = career.fine(fine); respawn(false); missions?.refresh(); return paid; } });
-missions = createMissionSystem({city,scene,car,career,getDamage:()=>collisionTotal/10000,getWanted:()=>police.state.level,
-  travel:pose=>{start();timeScale=1;resetCar(pose);camSnap=true;clearDrivingInput();},repair:()=>{repairCar();applyDamage();},onPause:clearDrivingInput});
+const police = createPolice({ traffic, city, player: car, audio, scene,
+  onBusted: fine => {
+    const paid = career.fine(fine);
+    missions?.engine.cancel('You were busted');
+    setTimeout(() => afterDown('BUSTED', `Paid ${'$' + paid.toLocaleString()} in fines`), 0);
+    return paid;
+  },
+  onEscaped: (earned, stars) => { career.earn(earned, stars * 20); missions?.refresh(); },
+  onShot: (shooter, level) => carShot(shooter, level),
+  onSpikes: () => { harm.tyres = Math.min(harm.tyres, 0.42); }
+});
+crime = createCrimeMode({
+  scene, camera, city, traffic, police, player: car,
+  solidsNear: nearSolids, addSolid, makeCarMesh,
+  career, presets: PRESETS, pickPreset,
+  // a crime only starts a chase if a cop sees it (police.crime checks witnesses); attacking police always counts
+  onCrime: (event, payload) => {
+    const pr = payload?.preset;
+    const take = pr ? Math.round(((pr.price || 8000) * 0.12) / 10) * 10 : 0;
+    const hot = pr && (pr.price || 0) >= 40000 ? 2 : 1;
+    // [stars, what, bounty, always counts, a civilian would call it in]
+    const C = {
+      carjack: [hot, 'Carjacking', 500 + take, false, true], theft: [hot, 'Vehicle theft', 300 + take, false, false],
+      alarm: [hot, 'Car alarm', 300 + take, false, true], policeCarTheft: [3, 'Stolen police car', 5000, true],
+      gunfire: [1, 'Shots fired', 200, false, true], assault: [1, 'Assault', 300, false, true], kill: [2, 'Homicide', 2000, false, true],
+      hitrun: [1, 'Hit and run', 400, false, true], hurtCop: [3, 'Assaulting an officer', 1500, true], killCop: [4, 'Officer down', 5000, true],
+    }[event];
+    if (!C) return;
+    let seen = police.crime(C[0], C[1], C[2], C[3]);
+    // gunfire carries: any unit within earshot comes running
+    if (!seen && event === 'gunfire' && police.state.level < 1 && traffic.police.units().some(v => Math.hypot(v.x - car.x, v.z - car.z) < 90)) { police.raise(1, 'Police heard the shots', 200); seen = true; }
+    if (!seen && C[4] && crime.civWitnesses(event === 'gunfire' ? 60 : 40) > 0) police.report(C[0], C[1], C[2], 5 + rand() * 5);
+    missions?.refresh();
+  },
+  onEnterCar: async (preset, pose, info) => {
+    car.x = pose.x; car.z = pose.z; car.y = pose.y ?? city.heightAt(pose.x, pose.z); car.h = pose.h;
+    car.vx = car.vz = car.w = 0; car.onFoot = false; car.armed = false;
+    if (info.owned) career.select(preset.id);
+    rideOwned = !!info.owned;
+    const loaded = await ensureModel(preset.model);
+    if (loaded) {
+      buildPlayer(preset); resetCar(pose); repairCar(); applyDamage();
+      const snap = info.parked?.damage || info.damage;
+      if (snap) { restoreDamage(snap); collisionTotal = Math.max(collisionTotal, snap.total || 0); }
+    }
+    carGroup.visible = true; camSnap = true;
+    crime.setDriving();
+  },
+  snapshotVehicle: v => (v && !v.lazy && v.soft ? damageSnapshot(v.soft) : null),
+  onCopShoot: (shooter, level) => carShot(shooter, level),
+  onPlayerWasted: () => {
+    const bill = Math.min(career.state.cash, 500 + Math.round(career.state.cash * 0.1));
+    career.fine(bill);
+    afterDown('WASTED', `Hospital bill ${'$' + bill.toLocaleString()}`);
+  }
+});
+// Busted or wasted: the car is gone, you walk out on the nearest pavement, the chase and any contract are over
+function afterDown(title, sub) {
+  missions?.engine.cancel(title === 'WASTED' ? 'You were wasted' : 'You were busted');
+  street?.fail(title === 'WASTED' ? 'You were wasted.' : 'You were busted.');
+  police.clear();
+  const pose = crime.pavementNear(car.x, car.z, car.y) || { x: city.start.x, z: city.start.z, y: city.start.y, h: city.start.h };
+  car.vx = car.vz = car.w = 0;
+  repairCar();
+  crime.startAt(pose); crime.heal();
+  carGroup.visible = false; camSnap = true;
+  showBanner(title, sub);
+  missions?.refresh();
+}
+function showBanner(title, sub) {
+  const b = el('banner'); if (!b) return;
+  b.innerHTML = `<b>${title}</b>${sub ? `<span>${sub}</span>` : ''}`;
+  b.className = 'show'; clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { b.className = ''; }, 3600);
+}
+el('start-foot').onclick = () => {
+  started = true;
+  startEl.hidden = true;
+  initAudio();
+  if (audio.ctx) { audio.ctx.resume(); audio.on = true; }
+  const pose = { x: city.start.x, z: city.start.z, y: city.heightAt(city.start.x, city.start.z), h: city.start.h };
+  crime.startAt(pose);
+  carGroup.visible = false;
+};
+missions = createMissionSystem({city,scene,car,career,getDamage:()=>collisionTotal/10000,getWanted:()=>police.state.level,getCrime:()=>crime,onPause:clearDrivingInput});
 missions.onPursuit = (level, job) => police.raise(level, job?.biz ? 'Police tip-off' : 'Escape contract', 500 * level);
-empire = createEmpireSystem({city,scene,car,career,missions,catalog,travel:pose=>{start();timeScale=1;resetCar(pose);camSnap=true;clearDrivingInput();},onPause:clearDrivingInput});
+// taxi rides: on foot you're dropped off on foot; in a car, the car comes with you
+const travelTo = pose => { start(); timeScale = 1; clearDrivingInput(); camSnap = true;
+  if (crime?.onFoot) crime.setFootPosition(crime.pavementNear(pose.x, pose.z, pose.y) || pose); else resetCar(pose); };
+empire = createEmpireSystem({city,scene,car,career,missions,catalog,travel:travelTo,onPause:clearDrivingInput});
+// Street life: Marlowe's jobs and Apex Customs (src/street.js)
+street = createStreet({ scene, city, car, career, crime, police, missions, onPause: clearDrivingInput,
+  getRide: () => crime.onFoot ? null : { preset, owned: rideOwned && career.state.owned.includes(preset.id), damage: soft.damage || 0, bullet: harm.bullet, tyres: harm.tyres },
+  // hand the car over: you're left standing beside where it was, and it's gone
+  dropCar: () => {
+    if (crime.onFoot) return;
+    const pose = crime.pavementNear(car.x + Math.cos(car.h) * 2.5, car.z - Math.sin(car.h) * 2.5, car.y) || { x: car.x + Math.cos(car.h) * 2.5, z: car.z - Math.sin(car.h) * 2.5, y: car.y, h: car.h };
+    car.vx = car.vz = car.w = 0; repairCar(); applyDamage();
+    crime.startAt(pose); carGroup.visible = false; camSnap = true;
+  },
+  repairCar: () => { repairCar(); soft.refresh(); applyDamage(); } });
+missions.blocked = () => !!street.active; missions.onAbandon = () => street.fail('You walked away from the job.');
 renderCards(el('start-cards'), async pr => { if(await chooseCar(pr)) start(); });
 
 const STEP = 1 / 240;
@@ -1481,17 +1705,24 @@ function frame(now) {
     // already at the lowest resolution and still slow: step the quality down once
     if (pixelRatio <= 0.61 && frameAvg > 24 && quality > 0 && !qualityPinned) setQuality(quality - 1, true);
   }
-  const paused = !started || !el('garage').hidden || missions.paused || empire.open || selectingCar || document.hidden;
+  const paused = !started || !el('garage').hidden || missions.paused || empire.open || street.shopOpen || street.briefOpen || selectingCar || document.hidden;
   const dt = paused ? 0 : real * timeScale;
   const inp = !paused ? readInput(dt) : { gas: 0, brake: 0, steer: 0, hb: 0 };
   acc += dt;
   let steps = 0;
-  while (acc >= STEP && steps < 30) { stepCar(STEP, inp); traffic.step(STEP); acc -= STEP; steps++; }
+  while (acc >= STEP && steps < 30) { if (!crime?.onFoot) stepCar(STEP, inp); traffic.step(STEP); acc -= STEP; steps++; }
   if (steps === 30) acc = 0;
-  city.update(dt); traffic.update(dt); grass.update(dt); if (started) police.update(dt);
-  missions.update(dt); if (started && !document.hidden) empire.update(real, dt);
+  city.update(dt); traffic.update(dt); grass.update(dt);
+  if (started) {
+    police.update(dt);
+    if (crime && crime.onFoot) crime.updateFixed(dt, keys);
+    if (crime && dt > 0) crime.updateWorld(dt, !crime.onFoot, Math.hypot(car.vx || 0, car.vz || 0));
+  }
+  missions.update(dt); if (started && !document.hidden) empire.update(real, dt); if (started) street.update(dt);
+  updateLoose(dt); updateSmoke(dt); updateDebris(dt); updateSparks(dt); syncCar(dt);
+  if (crime && crime.onFoot) crime.updateCamera(dt); else updateCamera(dt);
+  updateAudio(); updateHud();
   if (++cullTick % 6 === 0) city.cull(camera.position);
-  updateLoose(dt); updateSmoke(dt); updateDebris(dt); updateSparks(dt); syncCar(dt); updateCamera(dt); updateAudio(); updateHud();
   post.render(dt);
   requestAnimationFrame(frame);
 }
@@ -1499,7 +1730,7 @@ camSnap = true;
 updateCamera(0);
 requestAnimationFrame(frame);
 applyDamage();
-window.apex = { career, missions, get empire() { return empire; }, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
+window.apex = { career, missions, get empire() { return empire; }, get street() { return street; }, harmState: () => harm, get crime() { return crime; }, exitCar, makeCarMesh, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
   addSolid, view(mode, angle, radius = 11) { camMode = camModes.indexOf(mode); camSnap = true; orbitR = radius; if (angle !== undefined) { orbitA = angle; orbitHold = true; } } };
 el('loading').hidden = true;
 }

@@ -1,5 +1,5 @@
 /* Career interface, road-based event authoring and world navigation. */
-window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted,travel,repair,onPause}) {
+window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted,getCrime,onPause}) {
   const $=id=>document.getElementById(id), money=n=>'$'+Math.round(n).toLocaleString();
   const jobs=[],types=['delivery','race','clean','drift','escape'];
   const names={
@@ -30,11 +30,16 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
   }
   function length(route,from){let n=0,last=from;for(const p of route){n+=Math.hypot(p.x-last.x,p.z-last.z);last=p;}return n;}
   const routes=Array.from({length:TIERS},(_,t)=>chain(origin,1+Math.floor(t/3),350+t*170,7919*(t+1)));
-  for(let i=0;i<TIERS*5;i++) {
-    const type=types[i%5],tier=Math.floor(i/5),R=routes[tier],route=R.points;
+  // checkpoints and time limit for a route; contracts are planned from wherever you are when you take them
+  function plan(type,tier,R,from){
+    const route=R.points;
     const points=type==='race'?route:type==='delivery'?(R.ends.length>1?R.ends:[route[Math.floor((route.length-1)/2)],route[route.length-1]]).filter((p,j,a)=>!j||p!==a[j-1]):[];
-    const len=length(route,city.start),pace=1+tier*.09; // later tiers expect a faster car and cleaner lines
+    const len=length(route,from),pace=1+tier*.09; // later tiers expect a faster car and cleaner lines
     const limit=Math.ceil(type==='race'?(70+len/11)/pace:type==='delivery'?(130+len/9)/pace+points.length*4:type==='escape'?200+tier*25:170+tier*40);
+    return {points,route,limit};
+  }
+  for(let i=0;i<TIERS*5;i++) {
+    const type=types[i%5],tier=Math.floor(i/5),{points,route,limit}=plan(type,tier,routes[tier],city.start);
     jobs.push({id:'contract-'+i,name:names[type][tier],type,level:LEVELS[tier],limit,cash:Math.round(1500*1.42**tier/100)*100+(type==='escape'?800*(tier+1):0),xp:150+40*tier*tier+60*tier,
       goal:type==='drift'?600+tier*tier*90+tier*400:500+tier*500,points,route,start:city.start,tier,cargo:type==='delivery'&&tier>=3,fragile:type==='delivery'&&tier>=6,
       pursuit:type==='escape'?Math.min(5,1+Math.floor(tier/2)):0});
@@ -54,16 +59,28 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
     refresh();$('contract-list').replaceChildren();
     for(const j of jobs.filter(j=>filter==='all'||j.type===filter)){
       const record=career.state.records[j.id],locked=career.level<j.level,b=document.createElement('article');b.className='contract-card';
-      b.innerHTML=`<div class="job-meta">${j.type.toUpperCase()} <span>${record?record.medal.toUpperCase()+' · '+record.count+' clears':'NEW CONTRACT'}</span></div><h3>${j.name}</h3><p>${rules(j)}</p><div class="job-pay">${money(j.cash)} <small>+ ${j.xp} XP</small></div><div class="job-detail">${Math.floor(j.limit/60)}:${String(j.limit%60).padStart(2,'0')} limit · Rank ${j.level}${record?' · Best '+record.best.toFixed(1)+'s':' · +50% cash on first clear'}</div>`;
-      const btn=document.createElement('button');btn.textContent=locked?`Unlock at rank ${j.level}`:engine.active?'Contract in progress':'Travel & start';btn.disabled=locked||!!engine.active;btn.onclick=()=>begin(j);b.append(btn);$('contract-list').append(b);
+      b.innerHTML=`<div class="job-meta">${j.type.toUpperCase()} <span>${record?record.medal.toUpperCase()+' · '+record.count+' clears':'NEW CONTRACT'}</span></div><h3>${j.name}</h3><p>${rules(j)}</p><div class="job-pay">${money(j.cash)} <small>+ ${j.xp} XP</small></div><div class="job-detail">${j.type==='race'||j.type==='delivery'?'Starts where you are':Math.floor(j.limit/60)+':'+String(j.limit%60).padStart(2,'0')+' limit'} · Rank ${j.level}${record?' · Best '+record.best.toFixed(1)+'s':' · +50% cash on first clear'}</div>`;
+      const btn=document.createElement('button');btn.textContent=locked?`Unlock at rank ${j.level}`:engine.active?'Contract in progress':'Start here';btn.disabled=locked||!!engine.active;btn.onclick=()=>begin(j);b.append(btn);$('contract-list').append(b);
     }
-    $('abandon-job').hidden=!engine.active;
+    $('abandon-job').hidden=!engine.active&&!api.blocked?.();
   }
   function toggle(force){const open=force??$('mission-board').hidden;if(open){$('garage').hidden=true;renderBoard();} $('mission-board').hidden=!open;onPause();if(open)$('close-missions').focus();}
+  // a run of a contract, routed from where you are now (no teleport, no free repair)
+  function here(job){
+    if(job.biz||!(job.type==='race'||job.type==='delivery'))return job;
+    const link=nearestLink(car.x,car.z);if(!link)return job;
+    let R=null;
+    for(let k=0;k<4&&!R?.ends.length;k++)R=chain(link,1+Math.floor(job.tier/3),350+job.tier*170,(Date.now()%100000)*7+job.tier+1+k*101);
+    if(!R.ends.length)return job; // no route from here: run the authored one (drive to its first checkpoint)
+    return Object.assign({},job,plan(job.type,job.tier,R,{x:car.x,z:car.z}),{base:job});
+  }
   function begin(job){
+    job=job.base||job;
+    if(api.blocked?.())return false;
     if(engine.active||career.level<(job.level||1))return false;
-    lastResult=null;$('mission-result').hidden=true;if(job.start){travel(job.start);repair();}
-    const r=engine.start(job,sample());if(!r.ok)return false;
+    lastResult=null;$('mission-result').hidden=true;
+    const run=here(job);
+    const r=engine.start(run,sample());if(!r.ok)return false;job=run;
     job.onStart?.();
     if(job.pursuit)api.onPursuit?.(job.pursuit,job);
     toggle(false);refresh();return true;
@@ -75,7 +92,8 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
     $('result-pay').textContent=r.ok?`+${money(r.reward.cash)} / +${r.reward.xp} XP${r.reward.rankUp?' · RANK UP!':''}`:(r.job.failText||'No entry fee. Try again when you’re ready.');
     onPause();
   }
-  function sample(){return {x:car.x,z:car.z,y:car.y,speed:Math.hypot(car.vx,car.vz),slip:car.slipDeg,air:car.air,surface:car.surface,damage:getDamage(),wanted:getWanted()};}
+  function sample(){return {x:car.x,z:car.z,y:car.y,speed:Math.hypot(car.vx,car.vz),slip:car.slipDeg,air:car.air,surface:car.surface,damage:getDamage(),wanted:getWanted(),onFoot:!!getCrime?.()?.onFoot};}
+  engine.resume(jobs,sample());
   function update(dt){
     engine.update(dt,sample());uiClock+=dt;
     const a=engine.active,p=a?.job.points[a.stage];ring.visible=beam.visible=!!p;
@@ -95,7 +113,7 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
   function drawMap(g,X,Y){const a=engine.active;if(!a?.job.points.length)return;g.save();g.strokeStyle='#53e4c1';g.fillStyle='#53e4c1';g.lineWidth=2;g.setLineDash([5,4]);g.beginPath();g.moveTo(X(car.x,car.z),Y(car.x,car.z));for(const p of a.job.points.slice(a.stage))g.lineTo(X(p.x,p.z),Y(p.x,p.z));g.stroke();g.setLineDash([]);const p=a.job.points[a.stage];g.beginPath();g.arc(X(p.x,p.z),Y(p.x,p.z),6,0,Math.PI*2);g.fill();g.restore();}
   $('open-missions').onclick=()=>toggle();$('close-missions').onclick=()=>toggle(false);
   $('mission-filter').onchange=e=>{filter=e.target.value;renderBoard();};
-  $('abandon-job').onclick=()=>{toggle(false);engine.cancel();};
+  $('abandon-job').onclick=()=>{toggle(false);if(engine.active)engine.cancel();else api.onAbandon?.();};
   $('result-close').onclick=()=>{$('mission-result').hidden=true;onPause();};
   $('result-retry').onclick=()=>begin(lastResult.job);
   $('result-board').onclick=()=>{$('mission-result').hidden=true;toggle(true);};

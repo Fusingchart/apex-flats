@@ -10,7 +10,16 @@ Serve the folder over HTTP (the model and HDR loaders require it):
 npx serve .
 ```
 
-Three.js and the fonts load from a CDN, so the first load needs an internet connection.
+Three.js and its glTF loader are vendored in `vendor/`; only the web fonts come from a CDN (the game falls back to system fonts offline).
+
+To get a single HTML file with every asset embedded, which opens straight from disk with no server or network:
+
+```bash
+python3 build_standalone.py                      # writes dist/apex-flats.html
+python3 build_standalone.py -o ~/Desktop/apex.html
+```
+
+The standalone build uses the 2K sky (`assets/sky/sky_2k.hdr`, made by `tools/downsample_sky.py`) to keep the file size down.
 
 ## Controls
 
@@ -27,8 +36,13 @@ Three.js and the fonts load from a CDN, so the first load needs an internet conn
 | J | Contract board |
 | B | Business (Apex Holdings CEO panel) |
 | Tab | Full map |
-| R / Shift+R | Repair and drop back onto the nearest lane (Shift also tidies up knocked-over props) |
-| Z | Slow motion (¼ speed, free roam only) |
+| R / Shift+R | Back onto the nearest lane, damage and all (Shift also tidies up knocked-over props) |
+| F | Get out of the car; on foot, get in, carjack, or hold to pick a lock |
+| G (on foot) | Smash a window (sets off the alarm) |
+| Mouse, 1–4 (on foot) | Look and aim (right button), fire (left), fists / pistol / SMG / shotgun |
+| Shift (on foot) | Sprint |
+| Enter | Shop at Apex Customs (blue $ on the map) |
+| Z | Slow motion (¼ speed, free roam only, not while wanted) |
 | M | Mute |
 | G | Graphics quality (low / medium / high) |
 | H | Hide the controls panel |
@@ -41,7 +55,17 @@ You start with $2,500, the Commuter sedan, and the Metro hatchback. **J** opens 
 
 Starting a contract takes you to its road start and repairs your car. Follow the green world marker, directional arrow and map checkpoint line. Delivery stops require two stationary seconds. Race checkpoints must be crossed in order. Clean driving counts asphalt distance at 18–108 km/h and resets after collisions. Drift points require a moving, grounded slide on asphalt. Escape contracts start a pursuit; evade it after driving at least 150 m. Recovery or being busted ends the run without a reward. Menus pause gameplay and the timer; slow motion is disabled during contracts.
 
-Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 50. Police fines deduct available cash without putting the wallet into debt. Recovery and repairs stay free so a damaged starter never blocks progression.
+Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 22. Police fines and hospital bills deduct available cash without putting the wallet into debt. Race and delivery contracts are routed from wherever you take them, in whatever you're driving; there is no teleport and no free repair. Calling one of your own cars from the garage brings it fresh.
+
+## On foot and on the street
+
+Press **F** to get out. Cars stay where you leave them, dents and all, and the damage is still there when you get back in. On foot you can walk, sprint, shoot (tracers, muzzle flash, impacts; bullets stop at walls), pull drivers out of traffic, pick locks or smash windows. Parked cars at the kerb and in house driveways are real cars you can break into; expensive ones are rare. Officers you kill drop ammo.
+
+**Marlowe's jobs** (yellow **M** on the map): eight story missions from a fixer's garage, paying $2,000 to $100,000. Each is a chain of objectives: steal a particular kind of car, deliver it, collect a package on foot, take out a target who runs, steal a police cruiser, wait outside a bank and lose four stars, a five-star finale. Walk or drive into the marker to start the next one; busted or wasted fails it.
+
+**Apex Customs** (blue **$**): drive in and press **Enter** to repair the car, respray it to lose the police (only when they can't see you), sell a stolen car (10% of its value less damage, up to $10,000, one sale every 90 s), or buy ammo and body armour.
+
+Busted or wasted, you're back on your feet on the nearest pavement without the car, minus a fine or a hospital bill.
 
 ## Apex Holdings (business)
 
@@ -131,16 +155,21 @@ Patrol cars (black and white, light bar) drive in the normal traffic. If one can
 | Wrong-way driving (freeway: ★★) | ★ | $300 / $900 |
 | Hitting another car | ★ | $400 + |
 | Ramming a police car (always counts) | ★★ | $1,500 |
+| Carjacking, theft, a car alarm, gunfire, assault, homicide | ★–★★ | $200 + |
+| Shooting at or hurting an officer (always counts) | ★★★ | $1,500 |
+| Stealing a police car / killing an officer (always counts) | ★★★ / ★★★★ | $5,000 |
 
-While you're wanted, the stars and bounty show under the minimap and the siren gets louder as units close in. Reinforcements spawn out of sight, already heading your way, up to the number set by your level (2, 3, 4, 6 or 8 cars). Each unit has a job:
+Crimes no cop sees can still be reported: a civilian who saw it calls it in after a few seconds, and police within earshot come running to gunfire. The same offence repeated within a few seconds adds its bounty once.
+
+While you're wanted, the stars and bounty show under the minimap and the siren gets louder as units close in. Reinforcements spawn out of sight, already heading your way, up to the number set by your level (2, 3, 5, 7 or 9 cars). Each unit has a job:
 
 - **Chase** units sit on your tail and go for a PIT on your rear corner.
 - **Flank** units pull alongside and shove you sideways.
 - **Intercept** units drive to where you'll be in a few seconds and turn across your path.
 
-They route through the street network until they can see you, then come straight at you. They overtake through the oncoming lane when it's clear, brake for cross traffic, steer round walls, and reverse out of jams. Units stuck somewhere you can't see are quietly replaced. From three stars, roadblocks of two cruisers go up across the road ahead; from four, a helicopter circles overhead and keeps you in its searchlight unless something is over your head. Civilian drivers pull over for sirens, and brake, swerve and honk when you come at them fast. Staying in view raises your level every 40 s, and wrecking two cruisers raises it by one. Your bounty grows the whole time.
+They route through the street network until they can see you, then come straight at you. They overtake through the oncoming lane when it's clear, brake for cross traffic, steer round walls, and reverse out of jams. Units that stop making progress, or fall hopelessly behind, are quietly replaced by fresh ones round the corner. From two stars (one if you're armed) officers shoot from their cars: hits damage the engine, can shoot out a tyre, and sometimes hit you through the glass. When you stop or go on foot, officers get out, run you down, shoot, and arrest you if they get a hand on you. From three stars, roadblocks of two cruisers go up across the road ahead with a spike strip on the approach; from four, a helicopter keeps you in its searchlight unless something is over your head, and at five it shoots too. Civilian drivers pull over for sirens, and brake, swerve and honk when you come at them fast. Staying in view raises your level over time (faster with more units close), and wrecking two cruisers you hit raises it by one.
 
-To escape, break line of sight and keep every unit more than 60 m away until the stars stop flashing (13 s at one star, plus 4 s per extra star). The bounty stays on your head and fades slowly; above $1,500, any cop who gets a good look at you will start a chase. If you stop with a cruiser alongside for 3 s, you're busted: you pay the bounty and start again on the nearest road.
+To escape, break line of sight. The minimap then shows the search circle round where you were last seen: the evade clock barely moves inside it and runs fast outside it (6 s plus 3.5 s per star). An escape banks your bounty, capped by the highest stars of the chase ($1,500 at one star up to $30,000 at five). With a bounty on your head, any cop who gets a good look at you starts a chase. Stop with a cruiser alongside, or let an officer cuff you, for about 2 s and you're busted. R, the garage, taxis and slow motion don't work while you're wanted.
 
 ## Crash model
 
@@ -205,7 +234,11 @@ Together these took a typical downtown frame from about 1,540 draw calls and 3.6
 - `src/carmesh.js` — lofted car bodies (coupe, sedan, hatch, SUV) and bolt-on parts
 - `src/city.js` — the world: road graph, lanes, freeway and ramps, junction control, signals, height field, scenery
 - `src/traffic.js` — AI vehicles: spawning, dynamics, the driver model, collisions and police pursuit driving
-- `src/police.js` — offences, wanted level, bounty, evasion and busting, the HUD stars and the siren
+- `src/police.js` — offences, wanted level, bounty, witness reports, the search circle, evasion and busting, spike strips, the helicopter, the HUD stars and the siren
+- `src/crime.js` — on foot: walking, aiming and gunfire effects, pedestrians, parked and driveway cars, lock picking and carjacking, officers on foot
+- `src/street.js` — Marlowe's story jobs and the Apex Customs shops
+- `vendor/` — Three.js r149 and its glTF loader
+- `build_standalone.py` — the single-file offline build
 - `src/main.js` — scene, player physics, car presets, collisions, damage, audio, input, camera, HUD and loop
 
 Base physics tuning lives in `BASE_PRESETS` in `src/main.js`; per-car shape, paint, power/mass scaling, price and rank live in `assets/cars/designs.json`. Rebuilding derives `assets/cars/cars.json` from those definitions. Traffic density is `DENSITY` in `src/city.js`; the pool size is `max` in the `createTraffic` call. In the browser console, `apex.car`, `apex.crash` and `apex.traffic.vehicles` show live state, and `await apex.chooseCar(apex.PRESETS[n])` swaps owned cars outside active contracts.
@@ -233,7 +266,7 @@ The models have sculpted body skins, open wheel arches, passenger cavities, curv
 
 ## Verification
 
-Run `node --test tests/*.test.cjs` for career transactions, save validation, mission lifecycle, reward deduplication, HDR sun-direction and authored-normal regression tests. Browser smoke tests additionally cover all 24 model loads, menu flows, completion payouts, purchases, persistence, recovery and responsive layouts.
+Run `node --test tests/*.test.cjs` for career transactions, save validation, mission lifecycle, reward deduplication, HDR sun-direction and authored-normal regression tests. Browser smoke tests additionally cover all 24 model loads, menu flows, completion payouts, purchases, persistence, recovery and responsive layouts; `browser.crime.cjs` covers on-foot play, damage carrying over, carjacking, driveway cars, police that shoot and bust, wasted, and contracts starting where you are; `browser.street.cjs` covers a story job, the shop and the exploit guards.
 
 
-For the browser suite and preview generator, install development tools with `npm ci`. The suite uses installed Google Chrome. Start `python3 -m http.server 8085 --bind 127.0.0.1` in another terminal, then run `npm run test:browser`. Set `APEX_URL` to use a different server address. `npm run render:cars` regenerates the garage JPEGs from the actual game loader in the model studio.
+For the browser suite and preview generator, install development tools with `npm ci`. The suite uses installed Google Chrome. Start `python3 -m http.server 8085 --bind 127.0.0.1` in another terminal, then run `npm run test:browser`. Set `APEX_URL` to use a different server address (a `file://` URL to a standalone build works for the crime and street suites). `npm run render:cars` regenerates the garage JPEGs from the actual game loader in the model studio.
