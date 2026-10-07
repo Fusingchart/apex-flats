@@ -55,11 +55,13 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
   }
   // a crime only counts if a cop saw it (hitting a cop always counts)
   function crime(level, why, cash, always = false) {
+    if (S.graceT > 0 && !always) return false; // just out of hospital or the cells: give them a moment
     if (always || witnesses(SEE[S.level]).length || (eyes && eyes(60) > 0)) { raise(level, why, cash); return true; }
     return false;
   }
   // a civilian saw it and called it in: after a short delay the police know roughly where you were
   function report(level, why, cash, delay = 6) {
+    if (S.graceT > 0) return;
     if (S.reports.length < 4) S.reports.push({ level, why, cash, t: delay, x: player.x, y: player.y, z: player.z });
   }
 
@@ -185,7 +187,7 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
 
     // a known face: with a big enough bounty, any cop who gets a good look at you starts a chase
     // recently got away: any cop who gets a good look at you in the next minute or two picks the chase back up
-    S.knownT = Math.max(0, (S.knownT || 0) - dt);
+    S.knownT = Math.max(0, (S.knownT || 0) - dt); S.graceT = Math.max(0, (S.graceT || 0) - dt);
     if (!S.level && S.knownT > 0) {
       const close = witnesses(60);
       S.knowT = close.length || (eyes && eyes(30)) ? S.knowT + dt : 0;
@@ -315,8 +317,8 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
     const fine = Math.max(250 * (S.maxLevel || S.level || 1), Math.min(S.bounty, PAYOUT[S.maxLevel || S.level || 1] * 1.5)); S.maxLevel = 0;
     S.busted++; S.bounty = 0; S.level = 0; S.heat = 0; S.bustT = 0; S.downed = 0; S.evadeT = 0; S.lastSeen = null; S.reports.length = 0;
     P.standDown();
-    const paid = onBusted(fine);
-    say('Busted', `Paid ${money(paid ?? fine)} in fines`, 3500, 'red big');
+    onBusted(fine); // the game shows the BUSTED screen
+    msgEl.className = '';
   }
 
   // Spike strips: laid across the road on the approach to a roadblock; cross one and the tyres go
@@ -347,6 +349,6 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
     }
   }
   function clear() { S.maxLevel = 0; S.level = 0; S.bounty = 0; S.heat = 0; S.evadeT = 0; S.bustT = 0; S.downed = 0; S.lastSeen = null; S.reports.length = 0; P.standDown(); }
-  return { update, state: S, raise, crime, clear, report, bust, zoneR, setEyes(fn) { eyes = fn; }, arrest(dt = 0.05) { S.cuffT = Math.max(S.cuffT || 0, dt + 0.05); } };
+  return { update, state: S, raise, crime, clear, report, bust, zoneR, grace(t) { S.graceT = t; S.knownT = 0; S.reports.length = 0; }, setEyes(fn) { eyes = fn; }, arrest(dt = 0.05) { S.cuffT = Math.max(S.cuffT || 0, dt + 0.05); } };
 };
 })();

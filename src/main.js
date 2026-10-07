@@ -3,6 +3,8 @@ async function boot() {
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
+// Winter in Ashby Valley: snow on the ground, roofs and trees, an overcast sky, snow falling
+const WINTER = true;
 let seed = 1337;
 const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
@@ -10,19 +12,19 @@ const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 214
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 // Resolution adapts to keep the frame rate up (see the loop); start at up to 1.5x on high-DPI screens
-let pixelRatio = Math.min(devicePixelRatio, 1.5);
+let pixelRatio = Math.min(devicePixelRatio, 1.25);
 renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+renderer.toneMappingExposure = WINTER ? 1.02 : 0.95;
 
 // A sunny afternoon, lit by a real sky: a photographed HDR panorama (Poly Haven, CC0) is the visible sky, the
 // prefiltered environment for ambient light and reflections, and the source of the sun's direction and colour
 const scene = new THREE.Scene();
 const HAZE = new THREE.Color('#c9b9a4');
-scene.fog = new THREE.FogExp2(HAZE.clone(), 0.00018);
+scene.fog = new THREE.FogExp2(HAZE.clone(), WINTER ? 0.00055 : 0.00018); // winter air: thicker, colder haze
 const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 7000);
 
 const SKY = await loadHDR('assets/sky/sky_4k.hdr');
@@ -42,7 +44,7 @@ async function ensureModel(id) {
 await Promise.all(catalog.slice(0, 6).map(c => ensureModel(c.id)));
 let storage; try { storage = localStorage; } catch(e) {}
 const career = createCareer(catalog, storage);
-let missions = null, empire = null, crime = null, street = null, selectingCar = false, collisionTotal = 0, rideOwned = true;
+let missions = null, empire = null, crime = null, street = null, selectingCar = false, collisionTotal = 0, rideOwned = true, downing = false;
 // if the photo's sun sits very low, lift it a few degrees for gameplay so streets aren't all in shadow
 const sunDir = SKY.sunDir.clone();
 { const el = Math.asin(sunDir.y), lift = Math.max(el, 0.2), hz = Math.cos(lift) / Math.hypot(sunDir.x, sunDir.z); sunDir.set(sunDir.x * hz, Math.sin(lift), sunDir.z * hz).normalize(); }
@@ -50,16 +52,19 @@ const sunDir = SKY.sunDir.clone();
 const SKY_GAIN = SKY.gain; // same normalisation as the environment
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { sky: { value: SKY.skyTex }, gain: { value: SKY_GAIN }, haze: { value: scene.fog.color } },
+  uniforms: { sky: { value: SKY.skyTex }, gain: { value: SKY_GAIN }, haze: { value: scene.fog.color }, winter: { value: WINTER ? 0.85 : 0 } },
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
   fragmentShader: `
-    varying vec3 vDir; uniform sampler2D sky; uniform float gain; uniform vec3 haze;
+    varying vec3 vDir; uniform sampler2D sky; uniform float gain; uniform vec3 haze; uniform float winter;
     vec3 rgbe(vec4 t){ float e = t.a * 255.0; return e < 1.0 ? vec3(0.0) : t.rgb * 255.0 * exp2(e - 136.0); }
     void main(){
       vec3 d = normalize(vDir);
       vec2 uv = vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
       vec3 c = rgbe(texture2D(sky, uv)) * gain;
-      c = mix(c, haze, smoothstep(0.03, -0.04, d.y)); // below the horizon: the haze the land fades into
+      // winter: a pale, overcast sky (the photo's blue drained to a cold grey-white, the clouds kept)
+      float l = dot(c, vec3(0.3, 0.59, 0.11));
+      c = mix(c, vec3(l) * vec3(0.93, 0.97, 1.04) * 1.08 + vec3(0.05, 0.055, 0.065), winter);
+      c = mix(c, haze, smoothstep(0.03, -0.04, d.y) + winter * 0.25 * smoothstep(0.35, 0.0, d.y)); // the haze the land fades into
       gl_FragColor = vec4(c, 1.0);
       #include <tonemapping_fragment>
       #include <encodings_fragment>
@@ -76,11 +81,14 @@ scene.add(sky);
 // haze takes the colour of the sky's horizon in whichever direction you look (warm towards the sun)
 const hazeAt = h => { // h: camera yaw
   const u = ((Math.atan2(Math.cos(h), Math.sin(h)) / (Math.PI * 2) + 0.5) % 1 + 1) % 1, f = u * 64, i = Math.floor(f) % 64, j = (i + 1) % 64, t = f - Math.floor(f);
-  const H = SKY.horizon; return [0, 1, 2].map(k => (H[i * 3 + k] * (1 - t) + H[j * 3 + k] * t) * 0.92);
+  const H = SKY.horizon, c = [0, 1, 2].map(k => (H[i * 3 + k] * (1 - t) + H[j * 3 + k] * t) * 0.92);
+  if (!WINTER) return c;
+  const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11; // cold, pale, nearly colourless
+  return [0.82, 0.86, 0.9].map((w, k) => (l * 0.35 + 0.65 * w) * 0.75 + c[k] * 0.1);
 };
 
-scene.add(new THREE.HemisphereLight('#c9d4e0', '#6b5a42', 0.12));
-const sun = new THREE.DirectionalLight(new THREE.Color().setRGB(...SKY.sunColor.map(v => 0.6 + 0.4 * Math.sqrt(v))).lerp(new THREE.Color(1, 0.93, 0.82), 0.4), 2.6); // preserve detail on sunlit paint and concrete
+scene.add(WINTER ? new THREE.HemisphereLight('#dbe5ee', '#e6ecf0', 0.42) : new THREE.HemisphereLight('#c9d4e0', '#6b5a42', 0.12)); // snow bounces light back up
+const sun = new THREE.DirectionalLight(WINTER ? new THREE.Color('#e9eef6') : new THREE.Color().setRGB(...SKY.sunColor.map(v => 0.6 + 0.4 * Math.sqrt(v))).lerp(new THREE.Color(1, 0.93, 0.82), 0.4), WINTER ? 1.55 : 2.6); // winter: a weak, cold sun through cloud
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { left: -95, right: 95, top: 95, bottom: -95, near: 1, far: 600 });
@@ -97,7 +105,7 @@ function shadowed(m) { m.castShadow = true; m.receiveShadow = true; return m; }
 const solids = []; // {type: 'circle', x, z, r, h, y0?, mu} | {type: 'box', x, z, hx, hz, h, y0?, ux, uz, mu}
 
 /* ---------------- World ---------------- */
-const city = buildWorld({ scene, solids, rand });
+const city = buildWorld({ scene, solids, rand, winter: WINTER });
 console.log('world', city.stats);
 const grass = createGrass({ scene, city, camera, sunDir });
 // Spatial hash for static obstacles (16 m cells)
@@ -123,6 +131,7 @@ function addSolid(o) { // for tests and tools: register an obstacle after boot
 let queryId = 0;
 function nearSolids(x, z, r, out) {
   out.length = 0; queryId++;
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !(r < 1e4)) return out; // a bad position must never mean an endless scan
   for (let i = Math.floor((x - r) / GRID); i <= Math.floor((x + r) / GRID); i++)
     for (let j = Math.floor((z - r) / GRID); j <= Math.floor((z + r) / GRID); j++) {
       const list = solidGrid.get(cellKey(i, j));
@@ -154,6 +163,22 @@ const PRESETS = catalog.map(c => {
     peak:Math.round(base.peak*c.power), grip:base.grip*(c.id==='rally'?1.08:1), drive:c.id==='rally'?'awd':base.drive};
 });
 const SPLIT = { rwd: [0, 1], fwd: [1, 0], awd: [0.42, 0.58] };
+// How good a car is, GTA-style: top speed, acceleration, braking and traction as 0..1 bars, each relative to the
+// whole garage (so the slowest car isn't empty and the fastest fills the bar)
+const STATS = (() => {
+  const raw = PRESETS.map(pr => {
+    const pw = pr.peak * pr.redline * 0.8 * TAU / 60;
+    return { id: pr.id, top: Math.cbrt(pw / pr.drag), acc: pw / pr.mass * (pr.drive === 'awd' ? 1.1 : 1), brk: pr.brake / pr.mass, trc: pr.grip * (pr.drive === 'awd' ? 1.1 : 1) };
+  });
+  const out = {};
+  for (const k of ['top', 'acc', 'brk', 'trc']) {
+    const v = raw.map(r => r[k]), lo = Math.min(...v), hi = Math.max(...v);
+    for (const r of raw) (out[r.id] ||= {})[k] = 0.15 + 0.85 * (r[k] - lo) / (hi - lo || 1);
+  }
+  for (const r of raw) out[r.id].kmh = Math.round(r.top * 3.6 * 0.62 / 5) * 5; // a rough top speed for the label
+  return out;
+})();
+const statBars = id => { const S = STATS[id]; if (!S) return ''; return `<div class="stats">${[['Top speed', S.top], ['Acceleration', S.acc], ['Braking', S.brk], ['Traction', S.trc]].map(([n, v]) => `<span>${n}</span><i><b style="width:${Math.round(v * 100)}%"></b></i>`).join('')}</div>`; };
 function physicsOf(pr) {
   return {
     mass: pr.mass, inertia: pr.inertia, a: 1.25, b: 1.35, h: pr.cg, R: pr.wheel || 0.33,
@@ -301,16 +326,21 @@ const sat = a => Math.sin(1.65 * Math.atan(9 * a)); // Pacejka-ish tyre curve
 const harm = { toe: 0, frontGrip: 1, rearGrip: 1, drag: 0, engine: 0, power: 1, bullet: 0, tyres: 1 };
 
 function stepCar(dt, inp) {
+  // if a crash solve ever blows up (NaN or infinity), put the car back where it last was, at rest
+  if (![car.x, car.z, car.y, car.vx, car.vz, car.w, car.h].every(Number.isFinite)) { Object.assign(car, { x: car.px, z: car.pz, h: car.ph, vx: 0, vz: 0, w: 0, vy: 0 }); if (!Number.isFinite(car.y)) car.y = city.heightAt(car.x, car.z); }
   car.px = car.x; car.pz = car.z; car.ph = car.h;
   const s = Math.sin(car.h), c = Math.cos(car.h);
+  { const v = Math.hypot(car.vx, car.vz); if (v > 120) { car.vx *= 120 / v; car.vz *= 120 / v; } if (Math.abs(car.w) > 12) car.w = Math.sign(car.w) * 12; } // no car goes 430 km/h or spins 2 turns a second
+
   const fx = s, fz = c, sx = c, sz = -s; // forward and side (local +x) unit vectors
   let vLong = car.vx * fx + car.vz * fz;
   let vLat = car.vx * sx + car.vz * sz;
   const speed = Math.hypot(car.vx, car.vz);
   car.surface = city.surfaceAt(car.x, car.z, car.y);
-  car.onSand = car.surface !== 'asphalt';
+  const ice = car.surface === 'ice';
+  car.onSand = car.surface !== 'asphalt' && !ice;
   const wet = car.surface === 'water';
-  const mu = car.surface === 'asphalt' ? P.grip : (wet ? 0.35 : 0.72) * P.grip / 1.08;
+  const mu = car.surface === 'asphalt' ? P.grip : ice ? 0.3 * P.grip : (wet ? 0.35 : 0.72) * P.grip / 1.08; // frozen river and ponds: slick
   const gnd = car.air ? 0 : 1; // no tyre forces in the air
 
   // Gear selection
@@ -532,6 +562,26 @@ function coreHit(off, cr, o, s, c) {
 }
 
 const near = [], nearTmp = [];
+// Is this obstacle actually within reach of the car's body this step (box or post against the car's rectangle,
+// plus how far the two can close in a step)? Lamp posts and kerbside furniture a metre away are not, and keeping
+// them out lets the crash structure sleep instead of solving 240 times a second.
+function inReach(o, s, c, dt) {
+  const hx = (kit?.bodyHalfW || 0.95), hz = (kit?.length || 4.5) / 2;
+  const rel = Math.hypot(car.vx - (o.body?.vx || 0), car.vz - (o.body?.vz || 0)) * dt * 3 + 0.25;
+  const ax = c, az = -s; // the car's local x axis in the world
+  const dx = o.x - car.x, dz = o.z - car.z;
+  if (o.type === 'circle') {
+    const lx = dx * ax + dz * az, lz = dx * s + dz * c;
+    const ex = Math.max(0, Math.abs(lx) - hx), ez = Math.max(0, Math.abs(lz) - hz);
+    return Math.hypot(ex, ez) < o.r + rel;
+  }
+  for (const [nx, nz] of [[ax, az], [s, c], [o.ux, o.uz], [-o.uz, o.ux]]) {
+    const ra = (hx + rel) * Math.abs(ax * nx + az * nz) + (hz + rel) * Math.abs(s * nx + c * nz);
+    const rb = o.hx * Math.abs(o.ux * nx + o.uz * nz) + o.hz * Math.abs(-o.uz * nx + o.ux * nz);
+    if (Math.abs(dx * nx + dz * nz) > ra + rb) return false;
+  }
+  return true;
+}
 function collide(dt) {
   const s = Math.sin(car.h), c = Math.cos(car.h);
   const s0 = Math.sin(car.ph), c0 = Math.cos(car.ph);
@@ -541,7 +591,7 @@ function collide(dt) {
   near.length = 0;
   nearSolids(car.x, car.z, 6, nearTmp);
   traffic.boxesNear(car.x, car.z, 7, nearTmp, car.y);
-  for (const o of nearTmp) if (traffic.nearCar(car.x, car.z, car.h, o, 0.5, car.y)) near.push(localObstacle(near.length, o, car.px, car.pz, s0, c0, car.x, car.z, s, c, obsPool, car.y));
+  for (const o of nearTmp) if (traffic.nearCar(car.x, car.z, car.h, o, 0.5, car.y) && inReach(o, s, c, dt)) near.push(localObstacle(near.length, o, car.px, car.pz, s0, c0, car.x, car.z, s, c, obsPool, car.y));
   const res = soft.step(dt, near);
   if (res.fx || res.fz || res.tq) {
     const Fx = c * res.fx + s * res.fz, Fz = -s * res.fx + c * res.fz;
@@ -951,6 +1001,24 @@ function initAudio() {
     return { o1, o2, lp, g };
   });
 }
+// Gunshots: a sharp crack of filtered noise over a low thump, shaped per weapon; others' shots fall off with
+// distance. Your own shots also rumble a gamepad (or a phone).
+function gunshot(w, dist = 0) {
+  if (!audio.ctx || audio.muted || !audio.noiseBuf) return;
+  const t = audio.ctx.currentTime, far = 1 / (1 + dist * dist / 900), v = (w === -1 ? 0.55 : 1) * far;
+  const big = w === 3 ? 1.6 : w === 2 ? 0.75 : 1;
+  grain(t, w === 3 ? 900 : 1800, 0.7, 0.5 * v * big, 0.09 * big, 'lowpass');            // the blast
+  grain(t, 3800, 1.2, 0.28 * v, 0.05, 'highpass');                                       // the crack
+  const o = audio.ctx.createOscillator(), g = audio.ctx.createGain();                    // the thump in your chest
+  o.frequency.setValueAtTime(w === 3 ? 90 : 120, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+  g.gain.setValueAtTime(0.5 * v * big, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16 * big);
+  o.connect(g); g.connect(audio.master); o.start(t); o.stop(t + 0.2 * big);
+  if (dist < 60) grain(t + 0.08 + dist / 340, 600, 0.5, 0.08 * v, 0.35, 'lowpass');      // the street echoes it back
+  if (w >= 0) {
+    for (const gp of navigator.getGamepads ? navigator.getGamepads() : []) gp?.vibrationActuator?.playEffect?.('dual-rumble', { duration: w === 3 ? 140 : 60, strongMagnitude: w === 3 ? 0.9 : 0.45, weakMagnitude: 0.6 }).catch?.(() => {});
+    try { navigator.vibrate?.(w === 3 ? 60 : 25); } catch (e) { /* not on desktop */ }
+  }
+}
 function horn(vol) {
   const ctx = audio.ctx, t = ctx.currentTime;
   for (const f of [415, 494]) {
@@ -1046,6 +1114,7 @@ const camModes = ['Chase', 'Far', 'Bumper', 'Orbit'];
 let camMode = 0;
 addEventListener('keydown', e => {
   if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (downing) { if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault(); return; } // WASTED / BUSTED: hands off
   const menuOpen = !started || !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen;
   if (menuOpen && !['Escape','KeyJ','KeyV','KeyB','Enter'].includes(e.code)) return;
   if (e.repeat) { if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); return; }
@@ -1059,15 +1128,17 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyF' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) exitCar();
   if (e.code === 'KeyC') camMode = (camMode + 1) % camModes.length;
   if (e.code === 'KeyR' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) respawn(e.shiftKey);
+  if (e.code === 'KeyR' && crime?.onFoot) crime.reload();
   if (e.code === 'KeyV') toggleGarage();
   if (e.code === 'KeyJ') { empire?.toggle(false); missions?.toggle(); }
   if (e.code === 'KeyB' && started) empire?.toggle();
-  if (e.code === 'Tab') { e.preventDefault(); bigMap.open = !bigMap.open; el('bigmap').hidden = !bigMap.open; }
+  if (e.code === 'Tab') { e.preventDefault(); bigMap.open = !bigMap.open; el('bigmap').hidden = !bigMap.open; if (bigMap.open && document.pointerLockElement) document.exitPointerLock?.(); }
   if (e.code === 'KeyZ' && !missions?.engine.active && !street?.active && !police.state.level) timeScale = timeScale === 1 ? 0.25 : 1;
   // Enter opens the shop, but never steals Enter from a focused button or another open menu
   if (e.code === 'Enter' && started && street?.shopAt && !e.target.closest?.('button, a, select, input') && (street.shopOpen || !menuOpen)) { e.preventDefault(); street.openShop(); }
   if (e.code === 'KeyM') audio.muted = !audio.muted;
-  if (e.code === 'KeyH') document.getElementById('keys').classList.toggle('off');
+  if (e.code === 'KeyH') setHudMode(!document.body.classList.contains('gta'));
+  if ((e.code === 'Period' || e.code === 'Comma') && started && !crime?.onFoot) { const st = e.code === 'Period' ? radio.next() : radio.prev(); radioUserOff = !st; showRadio(); }
   if (e.code === 'KeyE') shift(1);
   if (e.code === 'KeyQ') shift(-1);
   if (e.code === 'KeyT') car.auto = true;
@@ -1075,8 +1146,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('mousedown', e => {
-  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen;
-  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay')) {
+  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen || bigMap.open || downing;
+  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay, #bigmap')) {
     crime.mouseButton(e.button, true);
     if (document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock?.(); if (r?.catch) r.catch(() => {}); } catch (err) { /* lock unavailable: look still follows the mouse */ } }
     e.preventDefault();
@@ -1289,34 +1360,116 @@ const ROAD_STYLE = {
   dt: ['rgba(243,236,228,0.42)', 8], rural: ['rgba(243,236,228,0.4)', 8], res: ['rgba(243,236,228,0.26)', 8], ind: ['rgba(243,236,228,0.26)', 8],
 };
 const MAP_ORDER = ['river', 'res', 'ind', 'rural', 'dt', 'art', 'hwy', 'ramp', 'fwy'];
+/* ---------------- The world map ---------------- */
+// One detailed top-down picture of the whole valley, painted once (in slices, so boot isn't held up): shaded
+// relief, woods, water, every building footprint and every road at its real width. The radar and the full map
+// both draw from it.
+const WORLD = { S: 3072, ext: city.EXT + 60, canvas: null, ready: false };
+WORLD.sc = WORLD.S / (2 * WORLD.ext);
+async function buildWorldMap() {
+  WORLD.building = true;
+  const { S, ext, sc } = WORLD, R = 1024, px = 2 * ext / R;
+  const relief = document.createElement('canvas'); relief.width = relief.height = R;
+  const rg = relief.getContext('2d'), img = rg.createImageData(R, R), D = img.data;
+  const hRow = new Float32Array(R + 1), hNext = new Float32Array(R + 1);
+  const rowH = (j, out) => { for (let i = 0; i <= R; i++) out[i] = city.groundAt(ext - i * px, ext - j * px); };
+  rowH(0, hRow);
+  for (let j = 0; j < R; j++) {
+    rowH(j + 1, hNext);
+    for (let i = 0; i < R; i++) {
+      const x = ext - i * px, z = ext - j * px, h = hRow[i];
+      const k = (j * R + i) * 4;
+      if (h < city.WATER - 0.3) { const deep = clamp((city.WATER - h) / 4, 0, 1); if (WINTER) { D[k] = 168 - 14 * deep; D[k + 1] = 196 - 12 * deep; D[k + 2] = 214 - 8 * deep; } else { D[k] = 46 - 10 * deep; D[k + 1] = 92 - 14 * deep; D[k + 2] = 132 - 10 * deep; } D[k + 3] = 255; continue; } // water (or, in winter, ice)
+      // lit from the north-west, so hills read at a glance
+      const shade = clamp(0.78 + ((hRow[i + 1] - h) + (hNext[i] - h)) * 0.55 / px, 0.45, 1.25), lift = clamp(h / 300, 0, 1);
+      const wild = city.grassAt(x, z), forest = wild > 0 ? city.forestAt(x, z) : 0, built = wild === 0;
+      let r = 58 + 30 * lift, gch = 70 + 22 * lift, b = 56 + 22 * lift;               // open ground: olive, paling with height
+      if (WINTER) { r = 176 + 30 * lift; gch = 184 + 28 * lift; b = 192 + 26 * lift; } // under snow
+      if (forest > 0.15) { const f = clamp(forest, 0, 1); if (WINTER) { r -= 70 * f; gch -= 58 * f; b -= 60 * f; } else { r -= 22 * f; gch -= 6 * f; b -= 18 * f; } } // woods: deeper green
+      if (built) { r = 72; gch = 74; b = 76; }                                         // pavement, yards, lots
+      if (h > 250) { const s = clamp((h - 250) / 60, 0, 1); r += (200 - r) * s; gch += (204 - gch) * s; b += (210 - b) * s; } // snow
+      D[k] = r * shade; D[k + 1] = gch * shade; D[k + 2] = b * shade; D[k + 3] = 255;
+    }
+    hRow.set(hNext);
+    if (j % 12 === 11) await new Promise(r => setTimeout(r, 0));
+  }
+  rg.putImageData(img, 0, 0);
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const o = cv.getContext('2d'), X = x => S / 2 - x * sc, Y = z => S / 2 - z * sc;
+  o.imageSmoothingEnabled = true; o.drawImage(relief, 0, 0, S, S);
+  // frozen ponds and the wind farm
+  for (const pd of city.country.ponds) {
+    o.beginPath(); pd.rad.forEach((r, k) => { const a = k / pd.n * TAU, x = X(pd.x + Math.cos(a) * r), y = Y(pd.z + Math.sin(a) * r); k ? o.lineTo(x, y) : o.moveTo(x, y); }); o.closePath();
+    o.fillStyle = WINTER ? '#b8ccd8' : '#2e5c84'; o.fill(); o.strokeStyle = 'rgba(40,60,80,0.4)'; o.lineWidth = 1; o.stroke();
+  }
+  for (const t of city.country.turbines) { o.fillStyle = '#f4f6f8'; o.strokeStyle = '#30343a'; o.lineWidth = 1; o.beginPath(); o.arc(X(t.x), Y(t.z), 3, 0, TAU); o.fill(); o.stroke(); }
+  // buildings
+  o.fillStyle = '#9a9ea6'; o.strokeStyle = 'rgba(30,32,36,0.55)'; o.lineWidth = 0.8;
+  let n = 0;
+  for (const s of solids) {
+    if (s.type !== 'box' || s.h < 3 || s.hx > 90 || s.hz > 90 || s.parkedCar) continue;
+    o.setTransform(1, 0, 0, 1, X(s.x), Y(s.z)); o.rotate(-Math.atan2(-s.uz, s.ux));
+    o.fillRect(-s.hx * sc, -s.hz * sc, 2 * s.hx * sc, 2 * s.hz * sc); o.strokeRect(-s.hx * sc, -s.hz * sc, 2 * s.hx * sc, 2 * s.hz * sc);
+    if (++n % 1500 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  o.setTransform(1, 0, 0, 1, 0, 0);
+  // roads: a dark casing, then the surface, at their real widths
+  const COL = { fwy: '#f0b84d', ramp: '#e8b456', hwy: '#e9dcae', art: '#e3d9b8', dt: '#d7d9dd', rural: '#cfd1d4', res: '#c4c7cc', ind: '#bfc1c4' };
+  o.lineCap = 'round'; o.lineJoin = 'round';
+  for (const pass of [0, 1]) for (const kind of MAP_ORDER) {
+    if (kind === 'river') continue;
+    const w = ROAD_STYLE[kind][1] * sc;
+    o.strokeStyle = pass ? COL[kind] : 'rgba(20,22,26,0.7)'; o.lineWidth = Math.max(pass ? 1.6 : 2.8, w + (pass ? 0 : 1.6));
+    o.beginPath();
+    for (const m of city.mapLines) { if (m.kind !== kind) continue; m.pts.forEach((q, i) => i ? o.lineTo(X(q.x), Y(q.z)) : o.moveTo(X(q.x), Y(q.z))); }
+    o.stroke();
+  }
+  WORLD.canvas = cv; WORLD.ready = true; WORLD.building = false; bigMap.base = null; // the full map repaints from it
+}
 for (const m of city.mapLines) { // bounding boxes, so the minimap only draws what's near
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const p of m.pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
   m.box = [x0, x1, z0, z1];
 }
+// GTA-style radar: a rounded rectangle, heading-up, you a little below centre so you see more of what's ahead; it
+// zooms out with speed. Roads, the GPS routes (purple to your waypoint, yellow to the job), blips, police and the
+// search circle.
+const MAP_W = 360, MAP_H = 232;
+let mapRange = 230;
 function drawMap() {
-  const g = mapCtx, W2 = 340, R = W2 / 2, range = 280, scale = R / range;
+  const g = mapCtx, W2 = MAP_W, H2 = MAP_H, cx = W2 / 2, cy = H2 * 0.62;
+  mapRange = lerp(mapRange, 210 + clamp(Math.hypot(car.vx, car.vz) * 5, 0, 260), 0.04);
+  const scale = (H2 * 0.62) / mapRange;
   const sh = Math.sin(car.h), ch = Math.cos(car.h);
-  const X = (x, z) => R - ((x - car.x) * ch - (z - car.z) * sh) * scale;
-  const Y = (x, z) => R - ((x - car.x) * sh + (z - car.z) * ch) * scale;
-  g.clearRect(0, 0, W2, W2);
-  g.save(); g.beginPath(); g.arc(R, R, R - 2, 0, TAU); g.clip();
-  g.fillStyle = 'rgba(18,16,24,0.72)'; g.fillRect(0, 0, W2, W2);
+  const X = (x, z) => cx - ((x - car.x) * ch - (z - car.z) * sh) * scale;
+  const Y = (x, z) => cy - ((x - car.x) * sh + (z - car.z) * ch) * scale;
+  const reach = mapRange * 2;
+  g.clearRect(0, 0, W2, H2);
+  g.save(); g.beginPath(); g.roundRect(1, 1, W2 - 2, H2 - 2, 14); g.clip();
+  g.fillStyle = 'rgba(30,36,34,0.86)'; g.fillRect(0, 0, W2, H2);
   g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const kind of MAP_ORDER) {
+  if (WORLD.ready) {
+    // the painted world map, turned and scaled under the radar (map pixel u,v -> world x = (S/2-u)/sc, z = (S/2-v)/sc)
+    const k = scale / WORLD.sc, dx0 = WORLD.S / 2 / WORLD.sc - car.x, dz0 = WORLD.S / 2 / WORLD.sc - car.z;
+    g.setTransform(ch * k, sh * k, -sh * k, ch * k, cx - (dx0 * ch - dz0 * sh) * scale, cy - (dx0 * sh + dz0 * ch) * scale);
+    g.drawImage(WORLD.canvas, 0, 0);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = 'rgba(14,16,20,0.18)'; g.fillRect(0, 0, W2, H2); // a touch darker, so blips pop
+  } else for (const kind of MAP_ORDER) {
     const [col, w] = ROAD_STYLE[kind];
     g.strokeStyle = col; g.lineWidth = Math.max(2, w * scale + 1.5);
     g.beginPath();
     for (const m of city.mapLines) {
       if (m.kind !== kind) continue;
       const [x0, x1, z0, z1] = m.box;
-      if (x1 < car.x - range * 1.5 || x0 > car.x + range * 1.5 || z1 < car.z - range * 1.5 || z0 > car.z + range * 1.5) continue;
+      if (x1 < car.x - reach || x0 > car.x + reach || z1 < car.z - reach || z0 > car.z + reach) continue;
       const step = m.pts.length > 400 ? 3 : 2;
       for (let i = 0; i < m.pts.length; i += step) { const q = m.pts[i]; i ? g.lineTo(X(q.x, q.z), Y(q.x, q.z)) : g.moveTo(X(q.x, q.z), Y(q.x, q.z)); }
       const l = m.pts[m.pts.length - 1]; g.lineTo(X(l.x, l.z), Y(l.x, l.z));
     }
     g.stroke();
   }
+  gps.draw(g, X, Y, Math.max(3, 9 * scale));
   missions?.drawMap(g, X, Y); empire?.drawMap(g, X, Y); street?.drawMap(g, X, Y);
   // where the police are searching for you: get outside the circle to lose them
   const PS = police.state;
@@ -1327,21 +1480,104 @@ function drawMap() {
   for (const v of traffic.vehicles) {
     if (v.state === 'idle') continue;
     const x = X(v.x, v.z), y = Y(v.x, v.z);
-    if (x < -10 || y < -10 || x > W2 + 10 || y > W2 + 10) continue;
+    if (x < -10 || y < -10 || x > W2 + 10 || y > H2 + 10) continue;
     g.save(); g.translate(x, y); g.rotate(car.h - v.h);
     g.fillStyle = v.police ? (v.state === 'pursue' ? ((performance.now() / 250 | 0) % 2 ? '#ff3b3b' : '#3b6bff') : '#5b7cff') : v.state === 'wreck' ? '#ff5a4e' : 'rgba(243,236,228,0.92)';
     g.fillRect(-2.5, -5, 5, 10); g.restore();
   }
-  g.fillStyle = '#ffb547'; g.beginPath(); g.moveTo(R, R - 9); g.lineTo(R + 6, R + 7); g.lineTo(R - 6, R + 7); g.closePath(); g.fill();
+  gps.drawPin(g, X, Y, W2, H2);
+  // you: a white arrowhead with a dark edge
+  g.fillStyle = '#f4f1ea'; g.strokeStyle = '#16151a'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(cx, cy - 10); g.lineTo(cx + 7, cy + 8); g.lineTo(cx, cy + 4); g.lineTo(cx - 7, cy + 8); g.closePath(); g.stroke(); g.fill();
   g.restore();
-  g.strokeStyle = 'rgba(243,236,228,0.16)'; g.lineWidth = 2; g.beginPath(); g.arc(R, R, R - 2, 0, TAU); g.stroke();
+  // north (+z), on the rim
+  const dirX = sh, dirY = -ch, tx = Math.abs(dirX) > 1e-6 ? (dirX > 0 ? (W2 - 14 - cx) / dirX : (14 - cx) / dirX) : Infinity, ty = Math.abs(dirY) > 1e-6 ? (dirY > 0 ? (H2 - 14 - cy) / dirY : (14 - cy) / dirY) : Infinity;
+  const tt = Math.min(tx, ty), Nx = cx + dirX * tt, Ny = cy + dirY * tt;
+  g.fillStyle = 'rgba(18,16,24,0.85)'; g.beginPath(); g.arc(Nx, Ny, 10, 0, TAU); g.fill();
+  g.fillStyle = '#f4f1ea'; g.font = '700 12px "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('N', Nx, Ny + 1);
+  g.strokeStyle = 'rgba(243,236,228,0.22)'; g.lineWidth = 2; g.beginPath(); g.roundRect(1, 1, W2 - 2, H2 - 2, 14); g.stroke();
 }
+
+/* ---------------- GPS: a waypoint you set on the map (Tab, click), and the route to the job ---------------- */
+// Routes follow the street network (the same Dijkstra the traffic uses), recomputed about once a second.
+const gps = (() => {
+  const cells = [];
+  const goals = city.nodes.filter(n => n.out.length && n.in.length);
+  const G = { waypoint: null, routes: { way: null, job: null }, t: 0, flip: 0, jobKey: '' };
+  function startLink() {
+    city.cellsNear(car.x, car.z, 45, cells);
+    let best = null, bd = Infinity;
+    const moving = Math.hypot(car.vx, car.vz) > 3, hv = Math.atan2(car.vx, car.vz);
+    for (const c of cells) {
+      if (Math.abs(c.y - car.y) > 4 || c.link.kind === 'ramp') continue;
+      const pts = c.link.lanes[c.lane].pts, a = pts[c.si], b = pts[c.si + 1];
+      const al = Math.cos(Math.atan2(b.x - a.x, b.z - a.z) - (moving ? hv : car.h));
+      const d = (c.x - car.x) ** 2 + (c.z - car.z) ** 2 + (1 - al) * 600;
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+  function plan(target) {
+    const from = startLink();
+    let goal = null, gd = Infinity;
+    for (const n of goals) { const d = (n.x - target.x) ** 2 + (n.z - target.z) ** 2; if (d < gd) { gd = d; goal = n; } }
+    if (!from || !goal) return null;
+    const links = from.link.to === goal ? [] : city.route(from.link, goal);
+    if (!links) return null;
+    const pts = [{ x: car.x, z: car.z }];
+    const add = (L, i0 = 0) => { const P = L.lanes[0].pts; for (let i = i0; i < P.length; i += 2) pts.push(P[i]); pts.push(P[P.length - 1]); };
+    add(from.link, from.si);
+    for (const L of links) add(L);
+    pts.push({ x: target.x, z: target.z });
+    return pts;
+  }
+  function jobTarget() { return street?.goal || missions?.target || null; }
+  G.update = dt => {
+    const W = G.waypoint;
+    if (W && Math.hypot(W.x - car.x, W.z - car.z) < 25) { G.waypoint = null; G.routes.way = null; }
+    if ((G.t -= dt) > 0) return;
+    G.t = 0.6; G.flip ^= 1;
+    if (G.flip) G.routes.way = G.waypoint ? plan(G.waypoint) : null;
+    else { const j = jobTarget(); G.routes.job = j && Math.hypot(j.x - car.x, j.z - car.z) > 40 ? plan(j) : null; }
+  };
+  function line(g, pts, X, Y, col, w) {
+    if (!pts) return;
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = w + 3; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(X(p.x, p.z), Y(p.x, p.z)) : g.moveTo(X(p.x, p.z), Y(p.x, p.z))); g.stroke();
+    g.strokeStyle = col; g.lineWidth = w; g.stroke();
+  }
+  G.draw = (g, X, Y, w) => { g.save(); g.lineCap = g.lineJoin = 'round'; line(g, G.routes.job, X, Y, '#f2c12e', w); line(g, G.routes.way, X, Y, '#b46cff', w); g.restore(); };
+  // the waypoint pin; off the edge of the radar it sits on the rim pointing the way
+  G.drawPin = (g, X, Y, W2, H2) => {
+    const W = G.waypoint; if (!W) return;
+    let x = X(W.x, W.z), y = Y(W.x, W.z);
+    if (W2) { x = clamp(x, 10, W2 - 10); y = clamp(y, 10, H2 - 10); }
+    g.fillStyle = '#b46cff'; g.strokeStyle = '#16151a'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y - 6, 6, Math.PI, 0); g.lineTo(x, y + 4); g.closePath(); g.fill(); g.stroke();
+  };
+  G.set = (x, z) => {
+    if (G.waypoint && Math.hypot(G.waypoint.x - x, G.waypoint.z - z) < 60) { G.waypoint = null; G.routes.way = null; return false; }
+    G.waypoint = { x, z }; G.t = 0; G.flip = 0; return true;
+  };
+  return G;
+})();
 // Full map (Tab): shaded relief, the river, every road and the place names, drawn once; you and the
 // traffic on top
 const bigMap = { open: false, base: null };
 function drawBigMap() {
   const cv = el('bigmap'), g = cv.getContext('2d'), S = cv.width, ext = city.EXT + 60, sc = S / (2 * ext);
   const X = x => S / 2 - x * sc, Y = z => S / 2 - z * sc; // east (-x) to the right, north (+z) up
+  if (!bigMap.base && WORLD.ready) {
+    const off = document.createElement('canvas'); off.width = off.height = S;
+    const o = off.getContext('2d');
+    o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high'; o.drawImage(WORLD.canvas, 0, 0, S, S);
+    o.textAlign = 'center'; o.textBaseline = 'middle';
+    for (const l of city.labels) {
+      o.font = l.kind === 'town' ? '700 19px "Chakra Petch", sans-serif' : l.kind === 'village' ? '600 15px "Chakra Petch", sans-serif' : 'italic 500 14px "IBM Plex Mono", monospace';
+      o.lineWidth = 4; o.strokeStyle = 'rgba(18,16,24,0.85)'; o.strokeText(l.name.toUpperCase(), X(l.x), Y(l.z));
+      o.fillStyle = l.kind === 'river' ? '#a9d4ea' : l.kind === 'road' ? '#ffb547' : '#f3ece4'; o.fillText(l.name.toUpperCase(), X(l.x), Y(l.z));
+    }
+    bigMap.base = off;
+  }
   if (!bigMap.base) {
     const off = document.createElement('canvas'); off.width = off.height = S;
     const o = off.getContext('2d');
@@ -1377,12 +1613,48 @@ function drawBigMap() {
   missions?.drawMap(g, x => X(x), (x,z) => Y(z)); empire?.drawMap(g, x => X(x), (x,z) => Y(z)); street?.drawMap(g, x => X(x), (x,z) => Y(z));
   g.fillStyle = 'rgba(243,236,228,0.85)';
   for (const v of traffic.vehicles) if (v.state !== 'idle') { g.fillStyle = v.police ? '#4f7bff' : 'rgba(243,236,228,0.85)'; g.fillRect(X(v.x) - 1.5, Y(v.z) - 1.5, 3, 3); }
+  gps.draw(g, x => X(x), (x, z) => Y(z), 3); gps.drawPin(g, x => X(x), (x, z) => Y(z));
+  g.fillStyle = 'rgba(243,236,228,0.75)'; g.font = '500 15px "IBM Plex Mono", monospace'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillText(gps.waypoint ? 'Click the pin to clear it · Tab to close' : 'Click to set a waypoint · Tab to close', 18, S - 18);
   g.save(); g.translate(X(car.x), Y(car.z)); g.rotate(Math.PI - car.h + Math.PI);
   g.fillStyle = '#ffb547'; g.strokeStyle = '#16151a'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -14); g.lineTo(9, 10); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
   g.restore();
 }
+// clicking the full map drops (or picks up) the waypoint
+el('bigmap').addEventListener('click', e => {
+  const cv = el('bigmap'), r = cv.getBoundingClientRect(), S = cv.width, ext = city.EXT + 60, sc = S / (2 * ext);
+  const px = (e.clientX - r.left) * S / r.width, py = (e.clientY - r.top) * S / r.height;
+  gps.set((S / 2 - px) / sc, (S / 2 - py) / sc);
+});
+// GTA-style HUD: the radar bottom-left with health and armour under it, stars and cash top-right, the weapon
+// under the cash. H switches to the detailed driving HUD (telemetry, damage map, rev counter, controls).
+const hudEl = { hpNum: el('hud-hp'), cash: el('hud-cash'), delta: el('hud-delta'), weapon: el('hud-weapon'), hp: el('hp-bar'), ar: el('ar-bar'), radio: el('radio-name') };
+let shownCash = null, deltaUntil = 0;
+function setHudMode(gta) {
+  document.body.classList.toggle('gta', gta);
+  try { localStorage.setItem('apex.hud', gta ? 'gta' : 'detailed'); } catch (e) { /* storage blocked: the mode just isn't remembered */ }
+}
+{ let m = null; try { m = localStorage.getItem('apex.hud'); } catch (e) {} setHudMode(m !== 'detailed'); }
+function updateGtaHud() {
+  const cash = career.state.cash;
+  if (shownCash === null) shownCash = cash;
+  if (cash !== shownCash) {
+    const d = cash - shownCash; shownCash = cash; deltaUntil = performance.now() + 2500;
+    hudEl.delta.textContent = (d > 0 ? '+' : '-') + '$' + Math.abs(d).toLocaleString('en-US');
+    hudEl.delta.className = d > 0 ? 'up show' : 'down show';
+  }
+  hudEl.cash.textContent = '$' + cash.toLocaleString('en-US');
+  if (deltaUntil && performance.now() > deltaUntil) { deltaUntil = 0; hudEl.delta.className = ''; }
+  hudEl.hp.style.width = clamp(crime.health, 0, 100) + '%';
+  hudEl.hpNum.innerHTML = `<i class="heart">♥</i>${Math.round(crime.health)}${crime.armor > 0 ? ` <i class="shield">◆</i>${Math.round(crime.armor)}` : ''}`;
+  document.body.classList.toggle('lowhp', crime.health < 30 && started);
+  hudEl.hp.classList.toggle('low', crime.health < 30);
+  hudEl.ar.style.width = clamp(crime.armor, 0, 100) + '%';
+  const w = crime.weapon, a = crime.ammo?.[w];
+  hudEl.weapon.textContent = crime.onFoot && w > 0 && a ? `${['', 'PISTOL', 'SMG', 'SHOTGUN'][w]}  ${a.mag} / ${a.res}` : crime.onFoot && w === 0 ? 'FISTS' : '';
+}
 function updateHud() {
-  drawMap();
+  drawMap(); updateGtaHud();
   if (bigMap.open) drawBigMap();
   const sp = Math.hypot(car.vx, car.vz) * 3.6;
   hud.speed.textContent = Math.round(sp);
@@ -1462,21 +1734,53 @@ function syncCar(dt) {
   { const hz = hazeAt(Math.atan2(camLook.x - camera.position.x, camLook.z - camera.position.z)); scene.fog.color.setRGB(hz[0], hz[1], hz[2]); }
 }
 
+/* ---------------- Falling snow ---------------- */
+// 9000 flakes in a 140 m box that travels with the camera; the falling, the drift and the wrap all happen on the GPU
+const snow = (() => {
+  if (!WINTER) return { update() {} };
+  const N = 9000, BOX = 140, H = 60, pos = new Float32Array(N * 3), seedA = new Float32Array(N);
+  for (let i = 0; i < N; i++) { pos[i * 3] = rand() * BOX; pos[i * 3 + 1] = rand() * H; pos[i * 3 + 2] = rand() * BOX; seedA[i] = rand(); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seedA, 1));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { t: { value: 0 }, cam: { value: new THREE.Vector3() }, scale: { value: 300 } },
+    vertexShader: `attribute float seed; uniform float t; uniform vec3 cam; uniform float scale; varying float vA;
+      void main(){
+        vec3 p = position;
+        p.y -= t * (1.1 + seed * 0.9);
+        p.x += sin(t * (0.6 + seed) + seed * 40.0) * 0.8 + t * 0.4;
+        p.z += cos(t * (0.5 + seed * 0.7) + seed * 17.0) * 0.8;
+        vec3 o = cam - vec3(${BOX / 2}.0, ${H / 2}.0, ${BOX / 2}.0);
+        p = mod(p - o, vec3(${BOX}.0, ${H}.0, ${BOX}.0)) + o;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float d = -mv.z;
+        gl_PointSize = clamp(scale * (0.05 + seed * 0.05) / d, 1.0, 9.0);
+        vA = smoothstep(${BOX / 2}.0, 20.0, d) * smoothstep(0.5, 2.0, d);
+      }`,
+    fragmentShader: `varying float vA; void main(){ vec2 q = gl_PointCoord - 0.5; float r = dot(q, q); if (r > 0.25) discard; gl_FragColor = vec4(vec3(0.97, 0.98, 1.0), vA * (1.0 - r * 4.0) * 0.9); }`,
+  });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 4; scene.add(pts);
+  return { update(dt) { mat.uniforms.t.value += dt; mat.uniforms.cam.value.copy(camera.position); mat.uniforms.scale.value = innerHeight * 0.9; } };
+})();
+
 /* ---------------- Loop ---------------- */
 const post = createPost(renderer, scene, camera);
 // Graphics quality (G cycles; drops automatically if the frame rate can't be held): resolution cap, shadow map
 // size, ambient occlusion, bloom
 const QUALITY = [
-  { name: 'Low', dpr: 1.0, shadow: 1024, ao: false, bloom: 0, grass: false },
-  { name: 'Medium', dpr: 1.25, shadow: 2048, ao: true, bloom: 0.05, grass: true },
-  { name: 'High', dpr: 1.5, shadow: 4096, ao: true, bloom: 0.05, grass: true },
+  { name: 'Low', dpr: 1.0, shadow: 1024, ao: false, bloom: 0, grass: false, msaa: 0 },
+  { name: 'Medium', dpr: 1.25, shadow: 2048, ao: true, bloom: 0.05, grass: true, msaa: 2 },
+  { name: 'High', dpr: 1.5, shadow: 3072, ao: true, bloom: 0.05, grass: true, msaa: 4 },
 ];
-let quality = 2, qualityPinned = false;
-function setQuality(q, auto = false) {
+// start at Medium; the frame-rate watcher steps up to High when there's room, down when there isn't
+let quality = 1, qualityPinned = false, upT = 0;
+function setQuality(q, auto = false, silent = false) {
   quality = q; const Q = QUALITY[q];
-  post.ao = Q.ao; post.finalMat.uniforms.bloom.value = Q.bloom; grass.enabled = Q.grass;
+  post.ao = Q.ao; post.finalMat.uniforms.bloom.value = Q.bloom; grass.enabled = Q.grass && !WINTER; // under snow, no grass post.setSamples(Q.msaa);
   if (sun.shadow.mapSize.x !== Q.shadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   if (pixelRatio > Q.dpr) { pixelRatio = Math.min(devicePixelRatio, Q.dpr); renderer.setPixelRatio(pixelRatio); resize(); }
+  if (silent) return;
   let t = document.getElementById('toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   { t.innerHTML = `<b>GRAPHICS</b> ${Q.name}${auto ? ' <span>(auto)</span>' : ''}`; t.style.opacity = 1; clearTimeout(setQuality.t); setQuality.t = setTimeout(() => { t.style.opacity = 0; }, 1600); }
@@ -1487,6 +1791,7 @@ function resize() {
   post.setSize(w * pixelRatio, h * pixelRatio);
 }
 addEventListener('resize', resize); resize();
+setQuality(quality, false, true);
 
 let started = false;
 const startEl = el('start');
@@ -1509,7 +1814,7 @@ function renderCards(container, onPick) {
     b.className = 'card' + (pr === preset ? ' on' : ''); b.dataset.car = pr.id;
     b.disabled = selectingCar || (!owned && (locked || career.state.cash < pr.price)) || (!starting && !!missions?.engine.active);
     b.innerHTML = `<img class="car-preview" src="assets/cars/previews/${pr.id}.jpg" alt="" loading="lazy"><span class="sw" style="background:rgb(${pr.paint.map(c => Math.round(Math.pow(c, 1 / 2.2) * 255)).join(',')})"></span>
-      <b>${pr.name}</b><i>${pr.kind}</i><span class="spec">${hp} hp · ${pr.mass} kg · ${pr.drive.toUpperCase()}</span><em>${pr.blurb}</em><strong class="car-price">${owned ? (pr === preset ? 'CURRENT · DRIVE' : 'OWNED · DRIVE') : locked ? 'RANK ' + pr.level + ' · $' + pr.price.toLocaleString() : 'BUY · $' + pr.price.toLocaleString()}</strong>`;
+      <b>${pr.name}</b><i>${pr.kind}</i><span class="spec">${hp} hp · ${pr.mass} kg · ${pr.drive.toUpperCase()}</span><em>${pr.blurb}</em>${statBars(pr.id)}<strong class="car-price">${owned ? (pr === preset ? 'CURRENT · DRIVE' : 'OWNED · DRIVE') : locked ? 'RANK ' + pr.level + ' · $' + pr.price.toLocaleString() : 'BUY · $' + pr.price.toLocaleString()}</strong>`;
     b.addEventListener('click', async e => { e.stopPropagation(); await onPick(pr); }); container.appendChild(b);
   });
   el('garage-balance').textContent = '$' + career.state.cash.toLocaleString() + ' · Rank ' + career.level + ' · ' + career.state.owned.length + '/24 owned';
@@ -1528,7 +1833,7 @@ async function chooseCar(pr) {
   buildPlayer(pr); resetCar(keep); repairCar(); applyDamage(); rideOwned = true;
   crime?.setDriving(); carGroup.visible = true;
   for (const k in lastMark) lastMark[k] = null;
-  career.select(pr.id); selectingCar = false; missions?.refresh(); return true;
+  career.select(pr.id); selectingCar = false; missions?.refresh(); if (started) onDrive(); return true;
 }
 async function pickGarage(pr) {
   if (selectingCar || missions?.engine.active) return;
@@ -1555,11 +1860,19 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape') { street?.closeAll(); toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
   if (e.code === 'KeyG' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) { qualityPinned = true; setQuality((quality + 2) % 3); }
 });
+// First time in: the controls panel stays up for a while even on the street HUD (H brings it back any time)
+function firstRunHint() {
+  let seen = false; try { seen = !!localStorage.getItem('apex.hinted'); localStorage.setItem('apex.hinted', '1'); } catch (e) {}
+  if (seen) return;
+  document.body.classList.add('show-keys'); setTimeout(() => document.body.classList.remove('show-keys'), 14000);
+}
 function start() {
   if (started) return;
   started = true; startEl.hidden = true;
   initAudio();
   if (audio.ctx) { audio.ctx.resume(); audio.on = true; }
+  if (!crime?.onFoot) setTimeout(onDrive, 600);
+  firstRunHint();
 }
 
 /* ---------------- Boot ---------------- */
@@ -1568,7 +1881,7 @@ await ensureModel(savedCar.id);
 buildPlayer(savedCar);
 resetCar();
 // AI traffic: a pool of cars that spawn around you, out of sight, in proportion to how busy each road is
-const traffic = createTraffic({ scene, city, rand, nearSolids, localObstacle, player: car, softConfig, camera, max: 44, carModels: CARMODELS,
+const traffic = createTraffic({ scene, city, rand, nearSolids, localObstacle, player: car, softConfig, camera, max: 60, carModels: CARMODELS,
   pickModel: r => { const pr = pickPreset(PRESETS.filter(q => CARMODELS.some(m => m.id === q.model)), r); return CARMODELS.find(m => m.id === pr?.model) || null; } });
 // A police bullet at you: on foot it's the crime layer's business; in a car it can hit the body, the engine, a
 // tyre or you through the glass. Every shot shows a tracer.
@@ -1591,6 +1904,7 @@ function carShot(shooter, level) {
 const police = createPolice({ traffic, city, player: car, audio, scene,
   onBusted: fine => {
     const paid = career.fine(fine);
+    if (missions) missions.holdResult = true; // the contract card waits until you come round
     missions?.engine.cancel('You were busted');
     setTimeout(() => afterDown('BUSTED', `Paid ${'$' + paid.toLocaleString()} in fines`), 0);
     return paid;
@@ -1602,7 +1916,7 @@ const police = createPolice({ traffic, city, player: car, audio, scene,
 crime = createCrimeMode({
   scene, camera, city, traffic, police, player: car,
   solidsNear: nearSolids, addSolid, makeCarMesh,
-  career, presets: PRESETS, pickPreset,
+  career, presets: PRESETS, pickPreset, onGunFx: (w, d) => gunshot(w, d),
   // a crime only starts a chase if a cop sees it (police.crime checks witnesses); attacking police always counts
   onCrime: (event, payload) => {
     const pr = payload?.preset;
@@ -1634,7 +1948,7 @@ crime = createCrimeMode({
       if (snap) { restoreDamage(snap); collisionTotal = Math.max(collisionTotal, snap.total || 0); }
     }
     carGroup.visible = true; camSnap = true;
-    crime.setDriving();
+    crime.setDriving(); onDrive();
   },
   snapshotVehicle: v => (v && !v.lazy && v.soft ? damageSnapshot(v.soft) : null),
   onCopShoot: (shooter, level) => carShot(shooter, level),
@@ -1645,26 +1959,98 @@ crime = createCrimeMode({
   }
 });
 // Busted or wasted: the car is gone, you walk out on the nearest pavement, the chase and any contract are over
+// WASTED / BUSTED: the world slows and drains of colour for a couple of seconds, then fades and you're back on
+// your feet on the nearest pavement. The chase stops at once; the job fails when you come round.
 function afterDown(title, sub) {
-  missions?.engine.cancel(title === 'WASTED' ? 'You were wasted' : 'You were busted');
-  street?.fail(title === 'WASTED' ? 'You were wasted.' : 'You were busted.');
-  police.clear();
-  const pose = crime.pavementNear(car.x, car.z, car.y) || { x: city.start.x, z: city.start.z, y: city.start.y, h: city.start.h };
-  car.vx = car.vz = car.w = 0;
-  repairCar();
-  crime.startAt(pose); crime.heal();
-  carGroup.visible = false; camSnap = true;
-  showBanner(title, sub);
-  missions?.refresh();
+  if (downing) return;
+  downing = true; police.clear(); clearDrivingInput();
+  timeScale = 0.3; document.body.classList.add('down');
+  el('passed').className = ''; el('copmsg').className = '';
+  showBanner(title, sub); radio.sting(title === 'WASTED' ? 'wasted' : 'busted');
+  setTimeout(() => {
+    document.body.classList.add('fade');
+    setTimeout(() => {
+      missions?.engine.cancel(title === 'WASTED' ? 'You were wasted' : 'You were busted');
+      street?.fail(title === 'WASTED' ? 'You were wasted.' : 'You were busted.', true);
+      police.clear();
+      // you come round at the hospital (wasted) or the police station (busted) in the nearest town that isn't where
+      // it all happened, the officers who were on you gone, with a short grace before anyone looks for you again
+      const towns = city.labels.filter(l => l.kind === 'town' || l.kind === 'village').map(l => ({ ...l, d: Math.hypot(l.x - car.x, l.z - car.z) }));
+      const town = towns.filter(l => l.d > 350).sort((a, b) => a.d - b.d)[0] || towns[0];
+      const off = title === 'WASTED' ? 60 : -60, lane = city.nearestLanePose(town.x + off, town.z, city.groundAt(town.x + off, town.z));
+      const pose = (lane && crime.pavementNear(lane.x, lane.z, lane.y)) || { x: city.start.x, z: city.start.z, y: city.start.y, h: city.start.h };
+      traffic.police.dismiss(); crime.clearCops(); police.grace(20);
+      car.vx = car.vz = car.w = 0;
+      repairCar();
+      ui.title(title === 'WASTED' ? 'Ashby General Hospital' : 'Ashby Police Department', town.name);
+      crime.startAt(pose); crime.heal();
+      carGroup.visible = false; camSnap = true; timeScale = 1;
+      document.body.classList.remove('down', 'fade');
+      downing = false;
+      if (missions) { missions.holdResult = false; missions.flushResult(); }
+      missions?.refresh();
+    }, 450);
+  }, 2600);
 }
 function showBanner(title, sub) {
   const b = el('banner'); if (!b) return;
   b.innerHTML = `<b>${title}</b>${sub ? `<span>${sub}</span>` : ''}`;
-  b.className = 'show'; clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { b.className = ''; }, 3600);
+  b.className = 'show'; clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { b.className = ''; }, 3000);
+}
+// MISSION PASSED / MISSION FAILED across the middle of the screen (doesn't stop play)
+function showPassed(ok, title, sub) {
+  const b = el('passed'); if (!b) return;
+  b.querySelector('b').textContent = ok ? 'MISSION PASSED' : 'MISSION FAILED';
+  b.querySelector('em').textContent = title || '';
+  b.querySelector('span').textContent = sub || '';
+  b.className = ok ? 'show ok' : 'show fail';
+  radio.sting(ok ? 'passed' : 'failed');
+  clearTimeout(showPassed.t); showPassed.t = setTimeout(() => { b.className = ''; }, 5200);
+}
+// Mission text, GTA-style: a title card when a job starts, then lines of dialogue and the objective as subtitles
+// along the bottom of the screen, one after another, key words highlighted.
+const ui = (() => {
+  const box = el('subtitle'), card = el('title-card'), q = [];
+  let cur = null, t = 0;
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  function next() {
+    cur = q.shift() || null;
+    if (cur) { box.innerHTML = cur.html; box.classList.add('show'); t = cur.dur; } else box.classList.remove('show');
+  }
+  return {
+    talk(lines) { for (const [who, text] of lines || []) q.push({ html: `<b class="who">${esc(who)}:</b> ${esc(text)}`, dur: 1.6 + text.length * 0.055 }); if (!cur) next(); },
+    objective(html) { q.push({ html: `<span class="obj">${html}</span>`, dur: 6 }); if (!cur) next(); },
+    title(name, sub) {
+      card.querySelector('b').textContent = name; card.querySelector('span').textContent = sub || '';
+      card.classList.add('show'); clearTimeout(card.t); card.t = setTimeout(() => card.classList.remove('show'), 4200);
+    },
+    update(dt) { if (cur && (t -= dt) <= 0) next(); },
+    clear() { q.length = 0; cur = null; box.classList.remove('show'); },
+  };
+})();
+// Radio: a station comes on when you get in (as you left it, or a random one); , and . change station
+const radio = createRadio(audio);
+let radioUserOff = false;
+function showRadio() {
+  const st = radio.station, r = hudEl.radio; if (!r) return;
+  r.innerHTML = st ? `<b>${st.name}</b><span>${st.genre}</span>` : '<b>Radio off</b>';
+  r.classList.add('show'); clearTimeout(showRadio.t); showRadio.t = setTimeout(() => { r.classList.remove('show'); }, 2600);
+}
+// GTA shows what you just got into: the name, the class and its stats, for a few seconds
+function showCarCard() {
+  const c = el('car-card'); if (!c || !preset) return;
+  c.innerHTML = `<b>${preset.name}</b><small>${preset.kind} · ${(STATS[preset.id]?.kmh || 0)} km/h · value $${(preset.price || 0).toLocaleString('en-US')}</small>${statBars(preset.id)}`;
+  c.classList.add('show'); clearTimeout(showCarCard.t); showCarCard.t = setTimeout(() => c.classList.remove('show'), 4500);
+}
+function onDrive() {
+  showCarCard();
+  if (!radio.ensure()) return;
+  if (!radioUserOff && radio.idx < 0) radio.tune(1 + Math.floor(Math.random() * radio.stations.length));
+  showRadio();
 }
 el('start-foot').onclick = () => {
   started = true;
-  startEl.hidden = true;
+  startEl.hidden = true; firstRunHint();
   initAudio();
   if (audio.ctx) { audio.ctx.resume(); audio.on = true; }
   const pose = { x: city.start.x, z: city.start.z, y: city.heightAt(city.start.x, city.start.z), h: city.start.h };
@@ -1687,8 +2073,16 @@ street = createStreet({ scene, city, car, career, crime, police, missions, onPau
     car.vx = car.vz = car.w = 0; repairCar(); applyDamage();
     crime.startAt(pose); carGroup.visible = false; camSnap = true;
   },
-  repairCar: () => { repairCar(); soft.refresh(); applyDamage(); } });
-missions.blocked = () => !!street.active; missions.onAbandon = () => street.fail('You walked away from the job.');
+  repairCar: () => { repairCar(); soft.refresh(); applyDamage(); },
+  onResult: (ok, title, sub) => showPassed(ok, title, sub), ui });
+missions.blocked = () => !!street.active;
+const TYPE_NAME = { delivery: 'Delivery', race: 'Checkpoint race', clean: 'Clean driving', drift: 'Drift', escape: 'Police escape' };
+missions.onStart = (job, rules) => { if (job.biz) return; ui.clear(); ui.title(job.name, `${TYPE_NAME[job.type] || 'Contract'} · $${job.cash.toLocaleString('en-US')}`); ui.objective(rules); };
+missions.onResult = r => {
+  const w = r.reward;
+  showPassed(r.ok, r.job.name, r.ok ? (w.label || `${w.medal.toUpperCase()} · $${w.cash.toLocaleString('en-US')} · +${w.xp} XP${w.first ? ' · first clear' : ''}${w.rankUp ? ' · RANK UP' : ''}`) : r.reason);
+  if (!r.ok && !r.job.biz) ui.objective('Press <b>J</b> to try it again.');
+}; missions.onAbandon = () => street.fail('You walked away from the job.');
 renderCards(el('start-cards'), async pr => { if(await chooseCar(pr)) start(); });
 
 const STEP = 1 / 240;
@@ -1697,6 +2091,7 @@ function frame(now) {
   const real = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
   // Adaptive resolution: hold ~60 fps by trading pixels, never simulation time
   frameAvg = lerp(frameAvg, real * 1000, 0.05); dprTimer += real;
+  if (WORLD.building) dprTimer = 0; // the map is being painted in slices: those frames say nothing about the GPU
   if (dprTimer > 1.5) {
     dprTimer = 0;
     const maxDpr = Math.min(devicePixelRatio, QUALITY[quality].dpr);
@@ -1704,10 +2099,13 @@ function frame(now) {
     if (Math.abs(next - pixelRatio) > 0.01) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); resize(); }
     // already at the lowest resolution and still slow: step the quality down once
     if (pixelRatio <= 0.61 && frameAvg > 24 && quality > 0 && !qualityPinned) setQuality(quality - 1, true);
+    // comfortably fast at full resolution for a while: step quality back up
+    upT = frameAvg < 12.5 && pixelRatio >= maxDpr - 0.01 ? upT + 1 : 0;
+    if (upT >= 4 && quality < 2 && !qualityPinned) { upT = 0; setQuality(quality + 1, true); }
   }
   const paused = !started || !el('garage').hidden || missions.paused || empire.open || street.shopOpen || street.briefOpen || selectingCar || document.hidden;
   const dt = paused ? 0 : real * timeScale;
-  const inp = !paused ? readInput(dt) : { gas: 0, brake: 0, steer: 0, hb: 0 };
+  const inp = !paused && !downing ? readInput(dt) : { gas: 0, brake: 0, steer: 0, hb: 0 };
   acc += dt;
   let steps = 0;
   while (acc >= STEP && steps < 30) { if (!crime?.onFoot) stepCar(STEP, inp); traffic.step(STEP); acc -= STEP; steps++; }
@@ -1715,13 +2113,15 @@ function frame(now) {
   city.update(dt); traffic.update(dt); grass.update(dt);
   if (started) {
     police.update(dt);
-    if (crime && crime.onFoot) crime.updateFixed(dt, keys);
+    if (crime && crime.onFoot) crime.updateFixed(dt, downing ? {} : keys);
     if (crime && dt > 0) crime.updateWorld(dt, !crime.onFoot, Math.hypot(car.vx || 0, car.vz || 0));
   }
   missions.update(dt); if (started && !document.hidden) empire.update(real, dt); if (started) street.update(dt);
   updateLoose(dt); updateSmoke(dt); updateDebris(dt); updateSparks(dt); syncCar(dt);
   if (crime && crime.onFoot) crime.updateCamera(dt); else updateCamera(dt);
-  updateAudio(); updateHud();
+  snow.update(real);
+  updateAudio(); updateHud(); gps.update(real); if (!paused) ui.update(real);
+  radio.update(started && !crime.onFoot && !downing && carGroup.visible, paused ? 1 : police.state.level > 0 ? 0.45 : 0);
   if (++cullTick % 6 === 0) city.cull(camera.position);
   post.render(dt);
   requestAnimationFrame(frame);
@@ -1729,8 +2129,9 @@ function frame(now) {
 camSnap = true;
 updateCamera(0);
 requestAnimationFrame(frame);
+setTimeout(() => buildWorldMap().catch(e => console.warn('World map unavailable:', e)), 1200);
 applyDamage();
-window.apex = { career, missions, get empire() { return empire; }, get street() { return street; }, harmState: () => harm, get crime() { return crime; }, exitCar, makeCarMesh, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
+window.apex = { career, missions, gps, radio, WORLD, get empire() { return empire; }, get street() { return street; }, harmState: () => harm, get crime() { return crime; }, exitCar, makeCarMesh, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
   addSolid, view(mode, angle, radius = 11) { camMode = camModes.indexOf(mode); camSnap = true; orbitR = radius; if (angle !== undefined) { orbitA = angle; orbitHold = true; } } };
 el('loading').hidden = true;
 }

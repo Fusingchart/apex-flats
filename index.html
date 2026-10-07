@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Apex Flats</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="src/style.css?v=40">
+  <link rel="stylesheet" href="src/fonts.css?v=1">
+  <link rel="stylesheet" href="src/style.css?v=54">
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -23,15 +22,16 @@
     <b>C</b><span>Camera</span>
     <b>V / J</b><span>Garage / contracts</span>
     <b>B</b><span>Business (CEO)</span>
-    <b>Tab</b><span>Full map</span>
-    <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
+        <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
     <b>Z</b><span>Slow motion</span>
     <b>M</b><span>Mute</span>
     <b>G</b><span>Graphics quality (driving)</span>
     <b>F / G</b><span>Enter or carjack / break a window (on foot)</span>
     <b>Mouse / 1–4</b><span>Aim, fire, change weapon (on foot)</span>
     <b>Enter</b><span>Shop at Apex Customs (blue $)</span>
-    <b>H</b><span>Hide this panel</span>
+    <b>, / .</b><span>Radio station (in a car)</span>
+    <b>Tab</b><span>Map · click to set a waypoint</span>
+    <b>H</b><span>Switch HUD: street / detailed driving</span>
   </div>
 </div>
 
@@ -41,7 +41,16 @@
 <div id="copmsg"></div>
 <div id="banner"></div>
 <div id="hurt"></div>
-<canvas id="map" class="hud" width="340" height="340" aria-label="Minimap"></canvas>
+<canvas id="map" class="hud" width="360" height="232" aria-label="Radar"></canvas>
+<div id="vitals" class="hud" aria-hidden="true"><div class="bar"><i id="hp-bar"></i></div><div class="bar"><i id="ar-bar"></i></div></div>
+<div id="hud-tr" class="hud"><div id="hud-cash"></div><div id="hud-delta"></div><div id="hud-hp"></div><div id="hud-weapon"></div></div>
+<div id="car-card" class="hud"></div>
+<div id="lowhp-fx" class="hud"></div>
+<div id="radio-name" class="hud" aria-live="polite"></div>
+<div id="passed" aria-live="polite"><b></b><em></em><span></span></div>
+<div id="subtitle" aria-live="polite"></div>
+<div id="title-card"><b></b><span></span></div>
+<div id="fadefx"></div>
 <div id="crime-status" class="hud" hidden>HEALTH 100 · PISTOL</div>
 <div id="crime-prompt" class="hud" hidden></div>
 <div id="crosshair" aria-hidden="true"></div>
@@ -115,20 +124,21 @@
 <script>THREE.ColorManagement.legacyMode = false; // hex colours are sRGB and get converted to linear</script>
 <script src="src/hdr.js?v=29"></script>
 <script src="src/grass.js?v=29"></script>
-<script src="src/post.js?v=29"></script>
+<script src="src/post.js?v=52"></script>
 <script src="vendor/GLTFLoader.js"></script>
 <script src="src/carmodel.js?v=29"></script>
-<script src="src/softbody.js?v=29"></script>
+<script src="src/softbody.js?v=52"></script>
 <script src="src/carmesh.js?v=29"></script>
-<script src="src/city.js?v=41"></script>
-<script src="src/traffic.js?v=44"></script>
-<script src="src/police.js?v=44"></script>
+<script src="src/city.js?v=67"></script>
+<script src="src/traffic.js?v=59"></script>
+<script src="src/police.js?v=59"></script>
 <script src="src/career.js?v=44"></script>
-<script src="src/missions.js?v=44"></script>
+<script src="src/missions.js?v=51"></script>
 <script src="src/business.js?v=43"></script>
 <script src="src/empire.js?v=41"></script>
-<script src="src/crime.js?v=44"></script>
-<script src="src/street.js?v=2"></script>
-<script src="src/main.js?v=44"></script>
+<script src="src/crime.js?v=62"></script>
+<script src="src/street.js?v=51"></script>
+<script src="src/radio.js?v=1"></script>
+<script src="src/main.js?v=66"></script>
 </body>
 </html>

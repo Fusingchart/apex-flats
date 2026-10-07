@@ -47,7 +47,8 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
   const ring=new THREE.Mesh(new THREE.TorusGeometry(11,.22,8,64),new THREE.MeshBasicMaterial({color:0x53e4c1,depthTest:false,transparent:true,opacity:.8}));ring.rotation.x=Math.PI/2;ring.renderOrder=10;
   const beam=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,35,12),new THREE.MeshBasicMaterial({color:0x53e4c1,transparent:true,opacity:.24,depthWrite:false}));scene.add(ring,beam);ring.visible=beam.visible=false;
   let lastResult=null,filter='all',uiClock=0;
-  const engine=createMissionEngine(career,result=>{lastResult=result;ring.visible=beam.visible=false;renderResult();refresh();});
+  let pending=false;
+  const engine=createMissionEngine(career,result=>{lastResult=result;ring.visible=beam.visible=false;if(api.holdResult)pending=true;else renderResult();refresh();});
   function rules(j){if(j.rules)return j.rules;return j.type==='delivery'?'Stop inside each green zone for 2 seconds.'+(j.fragile?' Fragile cargo: heavy crashes destroy it.':j.cargo?' Crashes damage the cargo and cut the pay.':''):j.type==='race'?'Pass every checkpoint in order before time runs out.':j.type==='clean'?`Drive ${j.goal} m on asphalt at 18–108 km/h. Collisions reset the clean distance.`:j.type==='drift'?`Score ${j.goal} drift points on asphalt. Keep moving and hold a controlled slide.`:'Lose the police after the pursuit begins. Drive at least 150 m; getting busted fails the job.';}
   function refresh(){
     $('career-cash').textContent=money(career.state.cash);$('career-rank').textContent=`RANK ${career.level} · ${career.state.xp.toLocaleString()} XP`;
@@ -81,12 +82,13 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
     lastResult=null;$('mission-result').hidden=true;
     const run=here(job);
     const r=engine.start(run,sample());if(!r.ok)return false;job=run;
-    job.onStart?.();
+    job.onStart?.();api.onStart?.(job,rules(job));
     if(job.pursuit)api.onPursuit?.(job.pursuit,job);
     toggle(false);refresh();return true;
   }
   function renderResult(){
     const r=lastResult;if(!r)return;
+    if(api.onResult){api.onResult(r);return;} // the game shows MISSION PASSED / FAILED instead of this card
     $('mission-result').hidden=false;$('result-title').textContent=r.ok?'CONTRACT COMPLETE':'CONTRACT ENDED';
     $('result-name').textContent=r.job.name;$('result-reason').textContent=r.ok?(r.reward.label||`${r.reward.medal.toUpperCase()} · ${r.elapsed.toFixed(1)}s${r.reward.first?' · First-clear bonus':''}`):r.reason;$('result-retry').hidden=!!r.job.biz;
     $('result-pay').textContent=r.ok?`+${money(r.reward.cash)} / +${r.reward.xp} XP${r.reward.rankUp?' · RANK UP!':''}`:(r.job.failText||'No entry fee. Try again when you’re ready.');
@@ -117,6 +119,6 @@ window.createMissionSystem = function({city,scene,car,career,getDamage,getWanted
   $('result-close').onclick=()=>{$('mission-result').hidden=true;onPause();};
   $('result-retry').onclick=()=>begin(lastResult.job);
   $('result-board').onclick=()=>{$('mission-result').hidden=true;toggle(true);};
-  const api={engine,jobs,update,toggle,refresh,drawMap,begin,chain,status:null,get target(){return engine.active?.job.points[engine.active.stage];},get paused(){return !$('mission-board').hidden||!$('mission-result').hidden;},onPursuit:null};
+  const api={engine,jobs,update,toggle,refresh,drawMap,begin,chain,status:null,get target(){return engine.active?.job.points[engine.active.stage];},get paused(){return !$('mission-board').hidden||!$('mission-result').hidden;},onPursuit:null,holdResult:false,flushResult(){if(pending){pending=false;renderResult();}}};
   refresh();return api;
 };

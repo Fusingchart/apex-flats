@@ -29,6 +29,9 @@ window.buildWorld = function (ctx) {
   const TAU = Math.PI * 2;
   const R_INT = 11, PATCH = 10, HALF = 4, LANE = 1.8, LW = 3.7, FW = 12.4;
   const EXT = 3200, VIEW = 4608, WATER = 4, RIVER_W = 58;
+  // Winter: snow on the ground, the roofs and the trees, frosted pavements, salted roads
+  const WINTER = ctx.winter ?? false;
+  let pondHeight = () => -Infinity, countryTurbines = [], countryStats = { ponds: [], turbines: [], homes: 0 }; // filled in once the countryside is laid out
   const KMH = { res: 40, ind: 40, dt: 40, art: 50, rural: 70, hwy: 80, ramp: 60, fwy: 110 };
   const SPEED = {}; for (const k in KMH) SPEED[k] = KMH[k] / 3.6;
   const RANK = { res: 1, ind: 1, rural: 2, art: 3, dt: 3, hwy: 3, ramp: 3, fwy: 4 };
@@ -83,8 +86,14 @@ window.buildWorld = function (ctx) {
     const ridge = Math.max(0, 1 - Math.abs(fbm(x / 1150 + 5.5, z / 1150 + 1.9, 4)) * 1.7);
     h += north * (45 + 210 * ridge * ridge);
     h += smoothstep(1300, 3100, E - 0.5 * N) * 28 * (1 + fbm(x / 600 - 7, z / 600 + 2, 2));
-    // a flat-bottomed valley along the river
     const rd = Math.abs(riverSide(x, z));
+    // open country: rolling hills, knolls and gullies, strongest away from the river and downtown
+    const away = smoothstep(350, 1100, rd) * smoothstep(500, 1300, Math.hypot(x - 150, z - 430));
+    h += away * (18 * fbm(x / 310 + 2.2, z / 310 - 6.1, 3) + 10 * Math.max(0, fbm(x / 150 - 1.3, z / 150 + 4.4, 2)) - 6 * Math.max(0, -fbm(x / 210 + 7.7, z / 210 - 2.6, 2)));
+    // Mount Ashby: a lone snow-capped peak in the empty north-west
+    const pk = Math.hypot(x - 2350, z - 2350) / 640;
+    h += 240 * Math.exp(-1.6 * pk * pk) * (1 + 0.18 * fbm(x / 260 + 4, z / 260 - 4, 3));
+    // a flat-bottomed valley along the river
     h = lerp(h, 9 + rd * 0.012 + 2.5 * fbm(x / 350 + 1, z / 350 - 1, 2), 1 - smoothstep(120, 950, rd));
     h = Math.max(h, 7);
     // the valley is closed in by high ground beyond the map edge
@@ -795,7 +804,7 @@ window.buildWorld = function (ctx) {
   addDecks(fpts, fpts.deck, FW + 0.6);
   /** Surface height under (x, z) for something at height `yHint`: the highest bridge deck within a step of it, else the ground. */
   function heightAt(x, z, yHint = -Infinity) {
-    let best = groundAt(x, z) + 0.05;
+    let best = Math.max(groundAt(x, z) + 0.05, pondHeight(x, z), WINTER ? WATER + 0.03 : -Infinity); // in winter the river and the ponds are ice you can stand on
     const list = deckHash.get(hkey(Math.floor(x / HG), Math.floor(z / HG)));
     if (list) for (const s of list) {
       const dx = s.bx - s.ax, dz = s.bz - s.az, l2 = dx * dx + dz * dz;
@@ -1074,7 +1083,7 @@ window.buildWorld = function (ctx) {
     asphalt(g, w, h, [[w * 0.35, w * 0.08], [w * 0.65, w * 0.08]]);
     line(g, w * 0.12, 0, 2, h, YELLOWL); line(g, w * 0.88 - 2, 0, 2, h, WHITEL);
   }, true);
-  const roadMat = map => photoDetail(worldDetail(new THREE.MeshStandardMaterial({ map, roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+  const roadMat = map => photoDetail(worldDetail(new THREE.MeshStandardMaterial({ map, color: WINTER ? '#cfd4d9' : '#ffffff', roughness: WINTER ? 0.7 : 0.88, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     { fine: 1 / 1.7, mid: 1 / 19, big: 1 / 90, aFine: 0.03, aMid: 0.12, aBig: 0.12 }), 'aerial_asphalt_01', { scale: 7, lum: true, normal: 0.8 });
   // Pavement slabs: 2 m along the street (v), joints darker, each slab a slightly different shade
   const slabTex = canvasTex(256, 256, (g, w, h) => {
@@ -1089,10 +1098,10 @@ window.buildWorld = function (ctx) {
     fwy: roadMat(fwyTex), ramp: roadMat(rampTex),
     patch: roadMat(canvasTex(256, 256, (g, w, h) => asphalt(g, w, h), true)),
     paint: new THREE.MeshStandardMaterial({ color: '#d8d6cf', roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -4 }),
-    concrete: photoDetail(worldDetail(new THREE.MeshStandardMaterial({ color: '#b9b4ab', roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -3 }),
+    concrete: photoDetail(worldDetail(new THREE.MeshStandardMaterial({ color: WINTER ? '#e1e6ea' : '#b9b4ab', roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -3 }),
       { fine: 1 / 1.3, mid: 1 / 11, big: 1 / 70, aFine: 0.02, aMid: 0.08, aBig: 0.1 }), 'concrete_pavement', { scale: 3.2, tint: 0.6, normal: 1 }),
     // the paving under town junctions: drawn with no depth pull, so the asphalt pad and road ends always cover it
-    concreteBase: photoDetail(worldDetail(new THREE.MeshStandardMaterial({ color: '#b9b4ab', roughness: 0.9 }),
+    concreteBase: photoDetail(worldDetail(new THREE.MeshStandardMaterial({ color: WINTER ? '#e1e6ea' : '#b9b4ab', roughness: 0.9 }),
       { fine: 1 / 1.3, mid: 1 / 11, big: 1 / 70, aFine: 0.02, aMid: 0.08, aBig: 0.1 }), 'concrete_pavement', { scale: 3.2, tint: 0.6, normal: 1, key: 'base' }),
     wall: worldDetail(new THREE.MeshStandardMaterial({ color: '#a8a199', roughness: 0.9, side: THREE.DoubleSide }), { aMid: 0.1, aBig: 0.15 }),
   };
@@ -1104,7 +1113,7 @@ window.buildWorld = function (ctx) {
   const C3 = hex => new THREE.Color(hex);
   const TC = {
     grassA: C3('#4b6a33'), grassB: C3('#5e7d3c'), dry: C3('#7d7f4a'), forest: C3('#33482a'), rock: C3('#77706a'), rockDark: C3('#59524c'),
-    snow: C3('#e6eaee'), sand: C3('#a8977a'), cut: C3('#8a765c'), town: C3('#5f7c40'),
+    snow: C3('#e6eaee'), snowGround: C3('#e3e9ee'), ice: C3('#b9c9d4'), sand: C3('#a8977a'), cut: C3('#8a765c'), town: C3('#5f7c40'),
     fields: ['#9c9150', '#6f8c3c', '#7a6446', '#86a04c', '#a8a060', '#5f7d36', '#738f40'].map(C3),
   };
   const penDAt = (x, z) => aPenD[aIdx({ x, z })];
@@ -1140,6 +1149,12 @@ window.buildWorld = function (ctx) {
     const rd = Math.abs(riverSide(x, z));
     if (rd < 75 && h < WATER + 4) c.lerp(TC.sand, smoothstep(75, 40, rd) * smoothstep(WATER + 4, WATER + 1, h));
     if (carved) c.lerp(TC.cut, 0.3 * smoothstep(1.5, 6, Math.abs(h - nat))); // embankments are mostly grassed over
+    if (WINTER) {
+      // snow lies on anything flat enough to hold it; woods and windswept patches show through a little
+      const cover = smoothstep(0.5, 0.2, slope) * (0.86 + 0.14 * noise(x / 23, z / 23)) * (1 - 0.3 * smoothstep(0.2, 0.8, f)) * (0.9 + 0.1 * smoothstep(-0.3, 0.3, noise(x / 160 + 3, z / 160)));
+      c.lerp(TC.snowGround, clamp(cover, 0, 1));
+      if (rd < 75 && h < WATER + 1.5) c.lerp(TC.ice, 0.5);
+    }
     return c;
   }
   // Grass: blades and clumps in grey (the vertex colour supplies the hue), tiled every 5 m, plus world-space
@@ -1232,6 +1247,9 @@ window.buildWorld = function (ctx) {
   })();
   ripple.repeat.set(2 * VIEW / 22, 2 * VIEW / 22);
   const waterMat = new THREE.MeshStandardMaterial({ color: '#16303a', roughness: 0.06, metalness: 0.1, normalMap: ripple, normalScale: new THREE.Vector2(0.35, 0.35), transparent: true, opacity: 0.94 });
+  if (WINTER) { // frozen over: pale, matte, faintly crazed
+    Object.assign(waterMat, { transparent: false, opacity: 1, roughness: 0.22, metalness: 0.02 }); waterMat.color.set('#a9c4d3'); waterMat.normalScale.set(0.08, 0.08);
+  }
   const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * VIEW, 2 * VIEW), waterMat);
   water.rotation.x = -Math.PI / 2; water.position.y = WATER; scene.add(water);
   lap('terrain mesh');
@@ -1292,7 +1310,8 @@ window.buildWorld = function (ctx) {
   const farOf = name => FAR[name] ?? (name.startsWith('tower') ? 6000 : name.startsWith('apt') ? 1700 : 900);
   function defType(name, geo, mat, { colored = false, shadow = true, receive = true } = {}) { batches.set(name, { name, geo, mat, colored, shadow, receive, items: [] }); }
   const DECOR = {}; // per-type hooks that add 3D detail (window frames, ledges) to what was just placed
-  function put(name, x, y, z, yaw, sx, sy, sz, color) { const it = { x, y, z, yaw, sx, sy, sz, color, seed: rand() }; batches.get(name).items.push(it); if (DECOR[name]) DECOR[name](it, name); return it; }
+  const SNOWY = new Set(['cap', 'roof', 'hip', 'hedge']), SNOWTOP = new THREE.Color('#eef2f4');
+  function put(name, x, y, z, yaw, sx, sy, sz, color) { if (WINTER && color && SNOWY.has(name)) color = color.clone().lerp(SNOWTOP, 0.65); const it = { x, y, z, yaw, sx, sy, sz, color, seed: rand() }; batches.get(name).items.push(it); if (DECOR[name]) DECOR[name](it, name); return it; }
   function flush() {
     for (const [, b] of batches) {
       const byChunk = new Map();
@@ -1892,9 +1911,13 @@ window.buildWorld = function (ctx) {
   // wind: sway grows with height in the tree; phase from the tree's position so a stand of trees doesn't move as one
   // distance detail: every card is drawn close up; further away cards drop out in a fixed random order and the
   // survivors grow to keep the crown full (dropped cards collapse to a point, so they cost no pixels)
-  const windy = (mat, amp, key, lod = [35, 150, 0.25]) => {
+  const windy = (mat, amp, key, lod = [35, 150, 0.25], frost = 0) => {
     mat.onBeforeCompile = sh => {
       sh.uniforms.uWind = windTime;
+      // winter: the foliage drained of green and dusted with snow (more on the upward-facing leaves)
+      if (frost > 0) sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        { float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum) * vec3(0.95, 1.0, 1.06) * 1.25 + vec3(0.32, 0.34, 0.36), ${frost.toFixed(2)}); }`);
       sh.vertexShader = 'uniform float uWind;\nattribute vec3 cardC;\nattribute float rank;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         #ifdef USE_INSTANCING
           { vec3 wc = (modelMatrix * instanceMatrix * vec4(cardC, 1.0)).xyz;
@@ -1943,7 +1966,7 @@ window.buildWorld = function (ctx) {
     g.setAttribute('cardC', new THREE.Float32BufferAttribute(cen, 3)); g.setAttribute('rank', new THREE.Float32BufferAttribute(rank, 1));
     return g;
   }
-  const leafMat = windy(new THREE.MeshStandardMaterial({ map: leafTex, alphaTest: 0.5, side: THREE.DoubleSide, vertexColors: true, roughness: 0.75, color: new THREE.Color(0.78, 0.85, 0.7) }), 0.035, 'leafCards');
+  const leafMat = windy(new THREE.MeshStandardMaterial({ map: leafTex, alphaTest: 0.5, side: THREE.DoubleSide, vertexColors: true, roughness: 0.75, color: new THREE.Color(0.78, 0.85, 0.7) }), 0.035, 'leafCards', undefined, WINTER ? 0.72 : 0);
   defType('crown', cardCrown(170, 4242), leafMat, { colored: true }); FAR.crown = 2000;
   batches.get('crown').depthMat = cardDepth(leafTex);
   // conifer: whorls of drooping branch cards round the stem, narrowing to the top
@@ -1973,8 +1996,16 @@ window.buildWorld = function (ctx) {
     g.setAttribute('cardC', new THREE.Float32BufferAttribute(cen, 3)); g.setAttribute('rank', new THREE.Float32BufferAttribute(rank, 1));
     return g;
   })();
-  const firMat = windy(new THREE.MeshStandardMaterial({ map: firTex, alphaTest: 0.4, side: THREE.DoubleSide, vertexColors: true, roughness: 0.85, color: new THREE.Color(1.5, 1.6, 1.5) }), 0.02, 'firCards');
+  const firMat = windy(new THREE.MeshStandardMaterial({ map: firTex, alphaTest: 0.4, side: THREE.DoubleSide, vertexColors: true, roughness: 0.85, color: new THREE.Color(1.5, 1.6, 1.5) }), 0.02, 'firCards', undefined, WINTER ? 0.38 : 0);
   defType('fir', firGeo, firMat, { colored: true });
+  // a boulder: a lumpy, flattened icosahedron
+  const rockGeo = (() => {
+    let rs = 4711; const rr = () => (rs = (rs * 16807) % 2147483647) / 2147483647;
+    const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position, seen = new Map();
+    for (let i = 0; i < p.count; i++) { const key = p.getX(i).toFixed(3) + p.getY(i).toFixed(3) + p.getZ(i).toFixed(3); if (!seen.has(key)) seen.set(key, 0.78 + rr() * 0.4); const k = seen.get(key); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * (p.getY(i) < 0 ? 0.6 : 1), p.getZ(i) * k); }
+    g.computeVertexNormals(); return g;
+  })();
+  defType('rock', rockGeo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, flatShading: true }), { colored: true }); FAR.rock = 700;
   batches.get('fir').depthMat = cardDepth(firTex);
   // the far stand-ins use the average foliage colour
   const LEAF_AVG = new THREE.Color(0.045, 0.085, 0.022), FIR_AVG = new THREE.Color(0.025, 0.05, 0.02);
@@ -2170,9 +2201,9 @@ window.buildWorld = function (ctx) {
 
   /* ================= Trees ================= */
   const SIDING = ['#f1ece2', '#e6dcc8', '#c9d3d6', '#b9c6b0', '#d8c3a5', '#a9b4c2', '#ece4d9', '#cfc6b8', '#9fa9a0'].map(C3s);
-  const ROOFC = ['#3b3a3d', '#4a3f38', '#5b5f66', '#6b3d33', '#2f3236', '#55504a'].map(C3s);
-  const LEAF = ['#e2ead2', '#f0f2d8', '#d4e2c4', '#f4ecc8', '#e8e0b8', '#c8d8b8'].map(C3s); // tints over the photo foliage
-  const FIR = ['#c0d0b8', '#b0c4a8', '#d0d8c0'].map(C3s);
+  const ROOFC = (WINTER ? ['#eef1f3', '#e4e9ec', '#f4f6f7', '#dde3e7', '#e8ecee', '#d8dfe3'] : ['#3b3a3d', '#4a3f38', '#5b5f66', '#6b3d33', '#2f3236', '#55504a']).map(C3s); // snow on every roof
+  const LEAF = (WINTER ? ['#f2f5f6', '#e8eef0', '#fbfcfc', '#dfe6e8', '#eef2f2', '#e2e9ea'] : ['#e2ead2', '#f0f2d8', '#d4e2c4', '#f4ecc8', '#e8e0b8', '#c8d8b8']).map(C3s); // tints over the photo foliage (frosted in winter)
+  const FIR = (WINTER ? ['#c9d4cf', '#d8e0dc', '#bfcbc6'] : ['#c0d0b8', '#b0c4a8', '#d0d8c0']).map(C3s);
   let treeCount = 0;
   function addTree(x, z, kind = rand() < 0.75 ? 'leaf' : 'fir', scale = 1, onWalk = false) {
     if (Math.abs(x) > EXT - 4 || Math.abs(z) > EXT - 4 || (!onWalk && bitsAt(x, z)) || blocked(x, z, onWalk ? 0.8 : 1.8)) return;
@@ -2453,6 +2484,119 @@ window.buildWorld = function (ctx) {
     }
   }
   lap('buildings');
+  /* ================= The country: what lies between the towns ================= */
+  // Frozen ponds with ice-fishing huts, homesteads and log cabins off the country roads, a wind farm on the high
+  // ground, and woodland belts that ease each town out into the wild. Its own random stream, so nothing else moves.
+  let cs = 7771; const cr = () => (cs = (cs * 16807) % 2147483647) / 2147483647;
+  const inTown = (x, z, k = 1.06) => DISTRICTS.some(d => maskR(d, x, z) < k);
+  const roadGap = (x, z) => sampleGrid(cIn, x, z) ?? 1e9;
+  const openAt = (x, z, clear) => Math.abs(x) < EXT - 60 && Math.abs(z) < EXT - 60 && !bitsAt(x, z) && roadGap(x, z) > clear && !blocked(x, z, clear * 0.5) && groundAt(x, z) > WATER + 2;
+  const span = (x, z, r) => { let lo = 1e9, hi = -1e9; for (let k = 0; k < 10; k++) { const a = k / 10 * TAU, h = groundAt(x + Math.cos(a) * r * (k % 2 ? 0.55 : 1), z + Math.sin(a) * r * (k % 2 ? 0.55 : 1)); lo = Math.min(lo, h); hi = Math.max(hi, h); } const c = groundAt(x, z); return { lo: Math.min(lo, c), hi: Math.max(hi, c) }; };
+  // --- frozen ponds
+  const ponds = [];
+  const iceMat = new THREE.MeshStandardMaterial({ color: '#9fbccd', roughness: 0.07, metalness: 0.12 }); // clear blue-grey ice, glossy against the matte snow
+  for (let t = 0; t < 4000 && ponds.length < 10; t++) {
+    const x = (cr() * 2 - 1) * (EXT - 300), z = (cr() * 2 - 1) * (EXT - 300);
+    if (inTown(x, z, 1.5) || !openAt(x, z, 70) || ponds.some(p => Math.hypot(p.x - x, p.z - z) < 650)) continue;
+    const R = 22 + cr() * 22, S = span(x, z, R + 4);
+    if (S.hi - S.lo > 1.6 || S.lo < WATER + 3) continue;
+    const n = 28, ph = cr() * 9, rad = [];
+    for (let k = 0; k < n; k++) { const a = k / n * TAU; rad.push(R * (0.8 + 0.22 * Math.sin(a * 2 + ph) + 0.12 * Math.sin(a * 3 - ph * 1.7))); }
+    const shape = new THREE.Shape(); rad.forEach((r, k) => { const a = k / n * TAU; k ? shape.lineTo(Math.cos(a) * r, Math.sin(a) * r) : shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); });
+    const y = S.hi + 0.06, m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 2).rotateX(-Math.PI / 2), iceMat);
+    m.position.set(x, y, z); m.receiveShadow = true; scene.add(m);
+    const pond = { x, z, y, R, rad, n }; ponds.push(pond);
+    addFootprint(x, z, R * 1.05, false);
+    // a couple of ice-fishing huts out on the ice, a bench by the shore
+    for (let h = 0; h < (cr() < 0.7 ? 2 : 1); h++) {
+      const a = cr() * TAU, d = R * (0.2 + cr() * 0.35), hx = x + Math.cos(a) * d, hz = z + Math.sin(a) * d, yaw = cr() * TAU;
+      put('part', hx, y, hz, yaw, 2.2, 2.1, 2.6, C3s(pickOf(['#9c3a2e', '#3a5a7a', '#c9a23a', '#4a6a3a', '#7a7a74'])));
+      put('roof', hx, y + 2.1, hz, yaw, 2.6, 0.7, 3.0, C3s('#5a4a40'));
+      solidBox(hx, hz, 1.1, 1.3, y, 2.8, Math.cos(yaw), -Math.sin(yaw), 0.5);
+    }
+  }
+  /** Ice you can stand on: the height of a frozen pond's surface at (x, z), or -Infinity */
+  function pondAt(x, z) {
+    for (const p of ponds) {
+      const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+      if (d > p.R * 1.4) continue;
+      const f = ((Math.atan2(dz, dx) / TAU) % 1 + 1) % 1 * p.n, k = Math.floor(f) % p.n, r = lerp(p.rad[k], p.rad[(k + 1) % p.n], f - Math.floor(f));
+      if (d < r) return p.y;
+    }
+    return -Infinity;
+  }
+  pondHeight = pondAt;
+  // --- homesteads and cabins along the country roads
+  const LOGC = ['#6b4a32', '#5a3d28', '#7a5638'].map(C3s), FARMC = ['#e8e2d6', '#d8d0c0', '#9c3a2e', '#e4dcc8', '#c8c0b0'].map(C3s), BARNC = ['#7a2e24', '#8a3a2a', '#6a3a2e'].map(C3s);
+  let homes = 0;
+  const homestead = (x, z, yaw, kind) => {
+    const S = span(x, z, kind === 'farm' ? 26 : 10); if (S.hi - S.lo > (kind === 'farm' ? 4 : 2.5)) return false;
+    const y0 = S.lo - 0.4, c = Math.cos(yaw), s = Math.sin(yaw), at = (a, o) => ({ x: x + c * a + s * o, z: z - s * a + c * o });
+    const house = (q, w, d, h, wall, roofC) => {
+      put('part', q.x, y0, q.z, yaw, w, h + (S.hi - S.lo) + 0.4, d, wall);
+      put('roof', q.x, y0 + h + (S.hi - S.lo) + 0.4, q.z, yaw, w + 0.9, h * 0.55, d + 0.9, roofC);
+      put('chimney', q.x + c * w * 0.3, y0 + h + (S.hi - S.lo), q.z - s * w * 0.3, yaw, 0.7, h * 0.75, 0.7);
+      solidBox(q.x, q.z, w / 2, d / 2, y0, h * 1.6 + (S.hi - S.lo), c, -s, 0.5); addFootprint(q.x, q.z, Math.hypot(w, d) / 2 + 2, true);
+    };
+    if (kind === 'cabin') {
+      house({ x, z }, 7, 6, 3.2, pickOf(LOGC), C3s('#4a3a30'));
+      const pq = at(0, 4.2); put('part', pq.x, y0, pq.z, yaw, 7, 0.5 + (S.hi - S.lo), 2, C3s('#5a4030')); // the porch
+    } else {
+      house({ x, z }, 9, 8, 5.6, pickOf(FARMC), C3s('#3a3a3a'));
+      const b = at(-17, 6); put('part', b.x, y0 - 0.2, b.z, yaw, 11, 6.5 + (S.hi - S.lo), 16, pickOf(BARNC));
+      put('roof', b.x, y0 + 6.3 + (S.hi - S.lo), b.z, yaw + Math.PI / 2, 17, 4.2, 12, C3s('#4a4a4a'));
+      solidBox(b.x, b.z, 5.5, 8, y0, 11, c, -s, 0.5); addFootprint(b.x, b.z, 11, true);
+      const t = at(-26, -3); put('tank', t.x, y0, t.z, 0, 5, 13 + (S.hi - S.lo), 5, C3s('#b9bcc0')); put('hip', t.x, y0 + 13 + (S.hi - S.lo), t.z, 0, 5.2, 2, 5.2, C3s('#8a8e94'));
+      solids.push({ type: 'circle', x: t.x, z: t.z, r: 2.5, h: 15, y0, mu: 0.5 }); addFootprint(t.x, t.z, 4, true);
+      // a paddock fence behind the barn
+      const fx = -22, fz = 22, FW = 34, FD = 22;
+      for (const [a0, o0, a1, o1] of [[fx - FW / 2, fz, fx + FW / 2, fz], [fx - FW / 2, fz + FD, fx + FW / 2, fz + FD], [fx - FW / 2, fz, fx - FW / 2, fz + FD], [fx + FW / 2, fz, fx + FW / 2, fz + FD]]) {
+        const L = Math.hypot(a1 - a0, o1 - o0), m = at((a0 + a1) / 2, (o0 + o1) / 2), fy = yaw + Math.atan2(a1 - a0, o1 - o0);
+        for (const hh of [0.55, 1.05]) put('part', m.x, groundAt(m.x, m.z) + hh, m.z, fy, 0.08, 0.12, L, C3s('#6a5038'));
+        for (let k = 0; k <= L; k += 3) { const pq = at(a0 + (a1 - a0) * k / L, o0 + (o1 - o0) * k / L); put('part', pq.x, groundAt(pq.x, pq.z) - 0.2, pq.z, fy, 0.14, 1.45, 0.14, C3s('#5a4030')); }
+      }
+    }
+    // a truck in the yard (a real one: you can break into it) and the drive down to the road
+    const pk = at(kind === 'farm' ? 8 : 6, -2); parkedCar(pk.x, pk.z, yaw + Math.PI / 2, true);
+    for (let o = -6; o > -34; o -= 2.2) { const q = at(1, o); if (roadGap(q.x, q.z) < 1.5) break; put('slab', q.x, groundAt(q.x, q.z) - 0.25, q.z, yaw, 3.2, 0.32, 2.3); }
+    homes++; return true;
+  };
+  for (const L of links) {
+    if (!(L.kind === 'rural' || L.kind === 'hwy')) continue;
+    const pts = L.lanes[0].pts;
+    for (let i = 20; i < pts.length - 20; i += 24 + (cr() * 18 | 0)) {
+      if (cr() > 0.42) continue;
+      const a = pts[i], b = pts[i + 1], h = Math.atan2(b.x - a.x, b.z - a.z), side = cr() < 0.5 ? 1 : -1, set = 30 + cr() * 14;
+      const x = a.x + Math.cos(h) * side * set, z = a.z - Math.sin(h) * side * set;
+      if (inTown(x, z, 1.15) || !openAt(x, z, 12) || pondAt(x, z) > -Infinity) continue;
+      homestead(x, z, h + (side > 0 ? -Math.PI / 2 : Math.PI / 2), cr() < 0.45 ? 'farm' : 'cabin');
+    }
+  }
+  // --- a wind farm along the high ground (blades turn in update())
+  const turbines = [];
+  {
+    const towerG = new THREE.CylinderGeometry(1.1, 2.1, 1, 14).translate(0, 0.5, 0), white = new THREE.MeshStandardMaterial({ color: '#eef1f3', roughness: 0.5 });
+    const bladeG = new THREE.BoxGeometry(1.4, 26, 0.35).translate(0, 13, 0), hubG = new THREE.SphereGeometry(1.4, 12, 8), nacG = new THREE.BoxGeometry(3, 3.2, 8);
+    const redLamp = new THREE.MeshBasicMaterial({ color: '#ff2a1a' }), lampG = new THREE.SphereGeometry(0.4, 8, 6);
+    for (let t = 0; t < 6000 && turbines.length < 14; t++) {
+      const x = (cr() * 2 - 1) * (EXT - 250), z = (cr() * 2 - 1) * (EXT - 250), h = groundAt(x, z);
+      if (h < 75 || h > 200 || inTown(x, z, 1.6) || !openAt(x, z, 45) || turbines.some(q => Math.hypot(q.x - x, q.z - z) < 200)) continue;
+      if (turbines.length && !turbines.some(q => Math.hypot(q.x - x, q.z - z) < 520)) continue; // keep them together as a farm
+      const g = new THREE.Group(); g.position.set(x, h - 1, z);
+      const tw = new THREE.Mesh(towerG, white); tw.scale.y = 64; tw.castShadow = true; g.add(tw);
+      const head = new THREE.Group(); head.position.y = 65; head.rotation.y = -0.6; g.add(head);
+      const nac = new THREE.Mesh(nacG, white); nac.castShadow = true; head.add(nac);
+      const rot = new THREE.Group(); rot.position.z = 4.4; head.add(rot);
+      rot.add(new THREE.Mesh(hubG, white));
+      for (let k = 0; k < 3; k++) { const bl = new THREE.Mesh(bladeG, white); bl.rotation.z = k * TAU / 3; bl.castShadow = true; rot.add(bl); }
+      rot.rotation.z = cr() * TAU;
+      const lamp = new THREE.Mesh(lampG, redLamp); lamp.position.set(0, 1.9, -1); head.add(lamp);
+      scene.add(g); turbines.push({ x, z, rot, lamp, sp: 0.5 + cr() * 0.25 });
+      solids.push({ type: 'circle', x, z, r: 2.2, h: 64, y0: h - 1, mu: 0.5 }); addFootprint(x, z, 8, true);
+    }
+  }
+  countryTurbines = turbines; countryStats = { ponds: ponds.map(p => ({ x: p.x, z: p.z, R: p.R, rad: p.rad, n: p.n })), turbines: turbines.map(t => ({ x: t.x, z: t.z })), homes };
+
   // Parks and plazas in town fill with trees; forests and woods cover the hills; trees line the river
   for (const d of DISTRICTS) {
     const R = Math.max(d.ru, d.rv);
@@ -2464,6 +2608,38 @@ window.buildWorld = function (ctx) {
   for (let x = -EXT + 6; x < EXT - 6; x += 12) for (let z = -EXT + 6; z < EXT - 6; z += 12) {
     const px = x + (rand() - 0.5) * 10, pz = z + (rand() - 0.5) * 10, h = natAt(px, pz), f = forestAt(px, pz, h);
     if (f > 0.05 && rand() < f * 0.8) addTree(px, pz, h > 95 || rand() < 0.3 ? 'fir' : 'leaf', 0.9 + rand() * 0.5);
+  }
+  // woodland belts round each town: the streets give way to trees, then to open country
+  for (const d of DISTRICTS) {
+    const R = Math.max(d.ru, d.rv);
+    for (let k = 0; k < (R * R) / 90; k++) {
+      const q = toWorld(d, (cr() * 2 - 1) * d.ru * 1.7, (cr() * 2 - 1) * d.rv * 1.7), m = maskR(d, q.x, q.z);
+      if (m < 1.03 || m > 1.7 || cr() > 0.75 * (1 - (m - 1.03) / 0.67)) continue;
+      const n = 2 + (cr() * 4 | 0);
+      for (let j = 0; j < n; j++) addTree(q.x + (cr() - 0.5) * 14, q.z + (cr() - 0.5) * 14, cr() < 0.55 ? 'fir' : 'leaf', 0.85 + cr() * 0.6);
+    }
+  }
+  // Rock outcrops: boulders on the steeper open ground and scattered over the hills (own random stream, so the
+  // rest of the valley is laid out exactly as before)
+  {
+    let rs = 90210; const rr = () => (rs = (rs * 16807) % 2147483647) / 2147483647;
+    const ROCKC = ['#5e5a55', '#6b665f', '#77716a', '#54504c', '#807a70', '#6a6258'].map(C3s);
+    for (let x = -EXT + 10; x < EXT - 10; x += 22) for (let z = -EXT + 10; z < EXT - 10; z += 22) {
+      const px = x + (rr() - 0.5) * 18, pz = z + (rr() - 0.5) * 18, h = natAt(px, pz);
+      if (h < WATER + 2 || bitsAt(px, pz)) continue;
+      const sl = Math.hypot(natAt(px + 3, pz) - natAt(px - 3, pz), natAt(px, pz + 3) - natAt(px, pz - 3)) / 6;
+      const want = smoothstep(0.18, 0.5, sl) * 0.75 + smoothstep(60, 160, h) * 0.12 + 0.015;
+      if (rr() > want) continue;
+      const n = 1 + (rr() * (sl > 0.3 ? 4 : 2) | 0);
+      for (let k = 0; k < n; k++) {
+        const bx = px + (rr() - 0.5) * 7, bz = pz + (rr() - 0.5) * 7, s = (0.9 + rr() * 1.8) * (k ? 0.7 : 1) * (sl > 0.3 ? 1.6 : 1);
+        if (bitsAt(bx, bz) || blocked(bx, bz, s + 0.5)) continue;
+        if ((sampleGrid(cIn, bx, bz) ?? 1e9) < s + 4) continue; // keep the roads (and their verges) clear
+        const by = groundAt(bx, bz);
+        put('rock', bx, by - s * 0.12, bz, rr() * TAU, s * (0.9 + rr() * 0.5), s * (0.75 + rr() * 0.45), s * (0.9 + rr() * 0.5), ROCKC[(rr() * ROCKC.length) | 0]);
+        if (s > 0.9) solids.push({ type: 'circle', x: bx, z: bz, r: s * 0.75, h: s, y0: by - 0.2, mu: 0.7 });
+      }
+    }
   }
   lap('trees');
 
@@ -2632,9 +2808,10 @@ window.buildWorld = function (ctx) {
       const g = groundAt(x, z);
       if (y > g + 0.8 && heightAt(x, z, y) > g + 0.5) return 'asphalt'; // on a bridge
       if (bitsAt(x, z) & (PAVED | WALK)) return 'asphalt';
-      return g < WATER - 0.3 ? 'water' : 'grass';
+      if (pondHeight(x, z) > -Infinity) return 'ice';
+      return g < WATER - 0.3 ? (WINTER ? 'ice' : 'water') : 'grass';
     },
-    parkedSpots,
+    WINTER, get country() { return countryStats; }, parkedSpots, forestAt: (x, z) => forestAt(x, z, groundAt(x, z)), WATER_LEVEL: WATER,
     /** Hide a parked stand-in (its instances and its solid) while a real car stands in its place, or bring it back */
     swapParked(spot, hide) {
       spot.swapped = hide;
@@ -2685,6 +2862,7 @@ window.buildWorld = function (ctx) {
       updateTerrain(cam.x, cam.z, 3);
     },
     update(dt) {
+      for (const t of countryTurbines) { t.rot.rotation.z += dt * t.sp; t.lamp.visible = (clock + t.sp * 3) % 2 < 0.3; }
       clock += dt; windTime.value = clock;
       ripple.offset.set(clock * 0.004, clock * 0.0025);
       const col = lampMesh.instanceColor;

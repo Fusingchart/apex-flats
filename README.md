@@ -1,6 +1,6 @@
 # Apex Flats
 
-A 3D driving game in the browser, built with Three.js. You drive a city on a hazy afternoon: a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can earn and collect 24 original cars.
+A 3D driving game in the browser, built with Three.js. You drive a city on a snowy winter afternoon (set `WINTER = false` in `src/main.js` for the original summer): a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can earn and collect 24 original cars.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Serve the folder over HTTP (the model and HDR loaders require it):
 npx serve .
 ```
 
-Three.js and its glTF loader are vendored in `vendor/`; only the web fonts come from a CDN (the game falls back to system fonts offline).
+Three.js and its glTF loader are vendored in `vendor/`, and the fonts (Chakra Petch and IBM Plex Mono, SIL Open Font License) in `assets/fonts/`, so nothing loads from a CDN.
 
 To get a single HTML file with every asset embedded, which opens straight from disk with no server or network:
 
@@ -35,17 +35,20 @@ The standalone build uses the 2K sky (`assets/sky/sky_2k.hdr`, made by `tools/do
 | V | Garage: buy or drive an owned car |
 | J | Contract board |
 | B | Business (Apex Holdings CEO panel) |
-| Tab | Full map |
+| Tab | Full map; click it to set a waypoint (a purple GPS route on the radar), click the pin to clear it |
 | R / Shift+R | Back onto the nearest lane, damage and all (Shift also tidies up knocked-over props) |
 | F | Get out of the car; on foot, get in, carjack, or hold to pick a lock |
 | G (on foot) | Smash a window (sets off the alarm) |
 | Mouse, 1–4 (on foot) | Look and aim (right button), fire (left), fists / pistol / SMG / shotgun |
-| Shift (on foot) | Sprint |
+| Shift (on foot) | Sprint (you jog by default) |
+| Space (on foot) | Jump |
+| R (on foot) | Reload |
 | Enter | Shop at Apex Customs (blue $ on the map) |
 | Z | Slow motion (¼ speed, free roam only, not while wanted) |
 | M | Mute |
 | G | Graphics quality (low / medium / high) |
-| H | Hide the controls panel |
+| H | Switch between the street HUD and the detailed driving HUD (telemetry, damage map, rev counter, controls) |
+| , / . | Radio: previous / next station, or off (in a car) |
 
 Gamepads work (left stick, triggers, A for handbrake), and phones get on-screen buttons.
 
@@ -57,11 +60,15 @@ Starting a contract takes you to its road start and repairs your car. Follow the
 
 Every completion awards cash and XP. First clears add 50% base cash and 100 XP; gold (within 55% of the time limit) adds 25% base cash, silver (within 78%) adds 10%. Best times, best medals and completion counts are saved. Contracts can be replayed for regular rewards. Rank uses `1 + floor(sqrt(XP / 350))`, capped at 22. Police fines and hospital bills deduct available cash without putting the wallet into debt. Race and delivery contracts are routed from wherever you take them, in whatever you're driving; there is no teleport and no free repair. Calling one of your own cars from the garage brings it fresh.
 
+## The street HUD
+
+By default the screen is laid out the way GTA players expect: the radar bottom-left (heading-up, zooming out with speed, a compass N on its rim) with health and armour bars under it; wanted stars, cash (with a green or red flash as it changes) and your weapon and ammo top-right; a small speed readout bottom-right in a car. The radar shows a yellow GPS route to the current job objective and a purple one to your waypoint, both along the streets. Three procedural stations (Ashby FM, Riverside Lo-Fi, Valley Rock 104) play in cars; one comes on when you get in. Story jobs and contracts open with a title card, play their dialogue and objectives as subtitles along the bottom (key words in yellow, the objective repeated if you seem lost), and end with a MISSION PASSED or MISSION FAILED card. Being wasted or busted greys the world out in slow motion before you come round. The radar and the full map are painted once from the world itself: shaded relief, woods, water, snow, every building footprint and every road at its real width. **H** brings back the detailed driving HUD.
+
 ## On foot and on the street
 
-Press **F** to get out. Cars stay where you leave them, dents and all, and the damage is still there when you get back in. On foot you can walk, sprint, shoot (tracers, muzzle flash, impacts; bullets stop at walls), pull drivers out of traffic, pick locks or smash windows. Parked cars at the kerb and in house driveways are real cars you can break into; expensive ones are rare. Officers you kill drop ammo.
+Press **F** to get out. Cars stay where you leave them, dents and all, and the damage is still there when you get back in. On foot you can walk, sprint, shoot (tracers, muzzle flash, impacts; bullets stop at walls), pull drivers out of traffic, pick locks or smash windows. Parked cars at the kerb and in house driveways are real cars you can break into; expensive ones are rare. Officers you kill drop ammo. Aiming (right mouse) eases the crosshair onto the nearest person (it turns red over a target and flashes on a hit); guns kick, sound and rumble a gamepad, empty magazines reload themselves, and the gun you carry is in your hand. People are rigged figures (hips, knees, elbows, faces, hair or beanies, puffer jackets, parkas and boots) that walk, run, aim and jump. Wasted or busted, you come round at the hospital or the police station in the nearest other town, with a short grace before the police look for you again.
 
-**Marlowe's jobs** (yellow **M** on the map): eight story missions from a fixer's garage, paying $2,000 to $100,000. Each is a chain of objectives: steal a particular kind of car, deliver it, collect a package on foot, take out a target who runs, steal a police cruiser, wait outside a bank and lose four stars, a five-star finale. Walk or drive into the marker to start the next one; busted or wasted fails it.
+**Marlowe's jobs** (yellow **M** on the map): eight story missions from a fixer's garage, paying $2,000 to $100,000. Each is a chain of objectives: steal a particular kind of car, deliver it, collect a package on foot, take out a target who runs, steal a police cruiser, wait outside a bank and lose four stars, a five-star finale. Walk or drive into the marker to start the next one. They fail if you're busted or wasted, wreck the car you're delivering, or let the debtor get away.
 
 **Apex Customs** (blue **$**): drive in and press **Enter** to repair the car, respray it to lose the police (only when they can't see you), sell a stolen car (10% of its value less damage, up to $10,000, one sale every 90 s), or buy ammo and body armour.
 
@@ -122,6 +129,8 @@ A 3.5 km square, generated at load (about half a second):
 - **Suburbs**: a 15 × 15 grid of junctions 150 m apart. Arterials every 450 m (50 km/h, painted lines), residential streets between (40 km/h), some with S-bends, some links missing for T-junctions. About 2,200 houses with garages, driveways and lit windows, plus parks, street trees, street lights, mailboxes and bins (knockable).
 - **Ring freeway**: a rounded square 2.6 km across, two lanes each way at 100 km/h, a concrete median and median lights. At eight **diamond interchanges** the freeway climbs onto a 7.5 m bridge over the crossing road. Off-ramps leave from the right lane; on-ramps feed a 180 m acceleration lane. Ramps meet the crossing road at signalised junctions, and each exit has a sign 400 m ahead.
 - **Countryside**: a 70 km/h rural loop around everything, woods and open fields.
+
+Out of town the land rolls: hills, knolls and gullies away from the river, a lone snow-capped peak (Mount Ashby) in the empty north-west, and rock outcrops on the steeper slopes and over the hills. Each town gives way to belts of woodland before the open country. Along the country roads there are about a hundred homesteads (farmhouses with a barn, a silo and a fenced paddock, or log cabins with a porch), each with a drive down to the road and a truck in the yard you can break into. Ten frozen ponds with ice-fishing huts lie in the hollows, and a wind farm of fourteen turbines turns on the high ground to the north. In winter the Ash River and the ponds are ice: you can walk on them and drive on them, though tyres find little grip.
 
 Junctions are run by traffic lights (16 s green, 3.5 s yellow, 1.5 s all-red), two-way stops (side streets stop for arterials) and all-way stops (between residential streets). Grass has less grip than asphalt. The minimap turns with your car; Tab shows the whole map.
 
@@ -237,6 +246,8 @@ Together these took a typical downtown frame from about 1,540 draw calls and 3.6
 - `src/police.js` — offences, wanted level, bounty, witness reports, the search circle, evasion and busting, spike strips, the helicopter, the HUD stars and the siren
 - `src/crime.js` — on foot: walking, aiming and gunfire effects, pedestrians, parked and driveway cars, lock picking and carjacking, officers on foot
 - `src/street.js` — Marlowe's story jobs and the Apex Customs shops
+- `src/radio.js` — the in-car radio stations and the mission / wasted / busted stingers
+- `src/fonts.css`, `assets/fonts/` — the vendored fonts
 - `vendor/` — Three.js r149 and its glTF loader
 - `build_standalone.py` — the single-file offline build
 - `src/main.js` — scene, player physics, car presets, collisions, damage, audio, input, camera, HUD and loop
@@ -266,7 +277,7 @@ The models have sculpted body skins, open wheel arches, passenger cavities, curv
 
 ## Verification
 
-Run `node --test tests/*.test.cjs` for career transactions, save validation, mission lifecycle, reward deduplication, HDR sun-direction and authored-normal regression tests. Browser smoke tests additionally cover all 24 model loads, menu flows, completion payouts, purchases, persistence, recovery and responsive layouts; `browser.crime.cjs` covers on-foot play, damage carrying over, carjacking, driveway cars, police that shoot and bust, wasted, and contracts starting where you are; `browser.street.cjs` covers a story job, the shop and the exploit guards.
+Run `node --test tests/*.test.cjs` for career transactions, save validation, mission lifecycle, reward deduplication, HDR sun-direction and authored-normal regression tests. Browser smoke tests additionally cover all 24 model loads, menu flows, completion payouts, purchases, persistence, recovery and responsive layouts; `browser.crime.cjs` covers on-foot play, damage carrying over, carjacking, driveway cars, police that shoot and bust, wasted, and contracts starting where you are; `browser.street.cjs` covers a story job, the shop and the exploit guards; `browser.gta.cjs` covers the street HUD, the radio, the waypoint GPS, MISSION PASSED and the BUSTED screen.
 
 
 For the browser suite and preview generator, install development tools with `npm ci`. The suite uses installed Google Chrome. Start `python3 -m http.server 8085 --bind 127.0.0.1` in another terminal, then run `npm run test:browser`. Set `APEX_URL` to use a different server address (a `file://` URL to a standalone build works for the crime and street suites). `npm run render:cars` regenerates the garage JPEGs from the actual game loader in the model studio.

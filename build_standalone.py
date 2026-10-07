@@ -34,6 +34,7 @@ def asset_mime(path: Path) -> str:
         '.glb': 'model/gltf-binary',
         '.hdr': 'application/octet-stream',
         '.json': 'application/json',
+        '.woff2': 'font/woff2',
     }.get(suffix, mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
 
 def procedural_sky_script() -> str:
@@ -163,6 +164,8 @@ def main() -> None:
         if ROOT not in path.parents or not path.is_file():
             raise FileNotFoundError(f'HTML references missing stylesheet: {url}')
         css = path.read_text(encoding='utf-8')
+        # url(../assets/...) inside the stylesheet (the fonts) becomes the embedded data URI
+        css = re.sub(r'url\((?:\.\./)?(assets/[^)]+)\)', lambda m: f'url({assets[m.group(1)]})' if m.group(1) in assets else m.group(0), css)
         return '<style>\n' + css.replace('</style', '<\\/style') + '\n</style>'
 
     html = re.sub(

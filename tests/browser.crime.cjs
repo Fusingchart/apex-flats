@@ -54,7 +54,7 @@ const { chromium } = require('playwright'), assert = require('node:assert/strict
   await p.evaluate(() => { for (const u of apex.traffic.police.units()) { u.x += 6000; u.z += 6000; } apex.police.clear(); });
   // steal a parked car by picking the lock (hold F)
   const cash0 = await p.evaluate(() => apex.career.state.cash);
-  await p.evaluate(() => { const r = apex.crime.parked.find(q => q.npc); window.__target = r; const h = r.pose.h; apex.crime.setFootPosition({ x: r.pose.x + Math.cos(h) * 2.2, z: r.pose.z - Math.sin(h) * 2.2, y: r.pose.y, h }); });
+  await p.evaluate(() => { const r = apex.crime.parked.find(q => q.npc); window.__target = r; const h = r.pose.h; for (const v of apex.traffic.vehicles) if (v.state !== 'idle' && Math.hypot(v.x - r.pose.x, v.z - r.pose.z) < 15) v.x += 4000; for (const q of apex.crime.parked) if (q !== r && Math.hypot(q.pose.x - r.pose.x, q.pose.z - r.pose.z) < 6) apex.crime.removeParked(q); apex.crime.setFootPosition({ x: r.pose.x + Math.cos(h) * 2.2, z: r.pose.z - Math.sin(h) * 2.2, y: r.pose.y, h }); });
   await p.waitForTimeout(250);
   const prompt = await p.locator('#crime-prompt').textContent();
   console.log('prompt', prompt);
@@ -137,9 +137,12 @@ const { chromium } = require('playwright'), assert = require('node:assert/strict
   assert.ok(chase.minHp < 100 || chase.busted, 'police shoot or bust you without help');
   if (!(await p.evaluate(() => apex.crime.onFoot))) { await p.keyboard.press('KeyF'); await p.waitForFunction(() => apex.crime.onFoot); }
   // wasted on foot: back on your feet on the pavement, full health, a hospital bill, the chase over
-  const wasted = await p.evaluate(() => { apex.career.state.cash += 1000; const c = apex.career.state.cash; apex.crime.hurt(500); return { cashBefore: c, cash: apex.career.state.cash, onFoot: apex.crime.onFoot, hp: apex.crime.health, level: apex.police.state.level }; });
+  const wasted = await p.evaluate(() => new Promise(res => { apex.career.state.cash += 1000; const c = apex.career.state.cash; apex.crime.hurt(500);
+    const grey = document.body.classList.contains('down'), banner = document.getElementById('banner').textContent;
+    setTimeout(() => res({ cashBefore: c, cash: apex.career.state.cash, onFoot: apex.crime.onFoot, hp: apex.crime.health, level: apex.police.state.level, grey, banner, after: document.body.classList.contains('down') }), 3600); }));
   console.log('wasted', wasted);
   assert.ok(wasted.onFoot && wasted.hp === 100 && wasted.cash < wasted.cashBefore && wasted.level === 0, 'wasted: on foot, healed, billed, chase over');
+  assert.ok(wasted.grey && /WASTED/.test(wasted.banner) && !wasted.after, 'wasted screen: greys out, banner, then back to colour');
   // driveway cars: the instanced ones near you turn into real cars you can break into
   const drive = await p.evaluate(() => new Promise(res => {
     const f = apex.crime.position;

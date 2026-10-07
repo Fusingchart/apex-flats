@@ -9,7 +9,7 @@
   const money = n => '$' + Math.round(n).toLocaleString('en-US');
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-  window.createStreet = function ({ scene, city, car, career, crime, police, missions, getRide, dropCar, repairCar, onPause }) {
+  window.createStreet = function ({ scene, city, car, career, crime, police, missions, getRide, dropCar, repairCar, onPause, onResult, ui }) {
     const $ = id => document.getElementById(id);
     // A place on a street at a bearing and distance from downtown (deterministic, like the businesses)
     function place(angle, dist) {
@@ -50,38 +50,73 @@
     // stage kinds: steal (get in a car that passes test), deliver (stop at a place in that car), goto (reach a
     // place, on foot if foot), lose (no stars), heat (police tipped off), kill (a marked target near a place)
     const anyStolen = r => r && !r.owned;
+    // Each job: a short call from Marlowe when it starts, then stages. `obj` is the objective line, GTA-style, with
+    // the key words in {braces} highlighted; `talk` is what's said when the stage begins; `wreck` fails the job if
+    // the car you're bringing in gets past that much damage.
+    const M = 'MARLOWE', L = 'LENA', D = 'DEBTOR';
     const JOBS = [
-      { name: 'Wheels', pay: 2000, brief: 'Marlowe needs a car for a job. Any car. Steal one and bring it to the garage. Keep the cops out of it.',
-        stages: [{ kind: 'steal', text: 'Steal a car', test: anyStolen }, { kind: 'deliver', to: GARAGE, text: 'Bring it to the garage', clean: true }] },
-      { name: 'Joyride', pay: 5000, brief: 'A client wants something quick. Find a car worth $25,000 or more and deliver it in one piece (under 25% damage).',
-        stages: [{ kind: 'steal', text: 'Steal a car worth $25,000+', test: r => anyStolen(r) && (r.preset.price || 0) >= 25000 }, { kind: 'deliver', to: GARAGE, text: 'Deliver it to the garage', maxDamage: 0.25, clean: true }] },
-      { name: 'Hot Pickup', pay: 8000, brief: 'A package is waiting at a drop across town. Somebody tipped off the police. Grab it, lose them, bring it back.',
-        stages: [{ kind: 'goto', to: DROP, foot: true, text: 'Collect the package on foot' }, { kind: 'heat', level: 2, text: 'The police were waiting' }, { kind: 'lose', text: 'Lose the police' }, { kind: 'goto', to: GARAGE, text: 'Bring the package to the garage' }] },
-      { name: 'Debt Collection', pay: 11000, brief: 'A man owes Marlowe and has stopped answering. He lives on the west side. He won\'t pay. Make sure nobody else tries that.',
-        stages: [{ kind: 'kill', at: HOUSE, text: 'Find the debtor and take him out' }, { kind: 'lose', text: 'Lose any heat' }, { kind: 'goto', to: GARAGE, text: 'Report back to the garage' }] },
-      { name: 'Black and White', pay: 16000, brief: 'For the next job we need a police cruiser. Take one off the street and bring it in.',
-        stages: [{ kind: 'steal', text: 'Steal a police car', test: r => anyStolen(r) && r.preset.id === 'interceptor' }, { kind: 'lose', text: 'Lose the police' }, { kind: 'deliver', to: GARAGE, text: 'Deliver the cruiser to the garage', clean: true }] },
-      { name: 'Getaway', pay: 26000, brief: 'The crew is hitting a bank. Be outside in a fast car, take them away, lose four stars of police and drop them at the safehouse.',
-        stages: [{ kind: 'deliver', to: BANK, text: 'Wait outside the bank in a car', wait: 6 }, { kind: 'heat', level: 4, text: 'The alarm\'s gone off' }, { kind: 'lose', text: 'Lose the police' }, { kind: 'deliver', to: SAFE, text: 'Drop the crew at the safehouse' }] },
-      { name: 'Export', pay: 42000, brief: 'A buyer at the docks wants two cars worth $40,000 or more. Deliver them one at a time, no heat.',
-        stages: [{ kind: 'steal', text: 'Steal a car worth $40,000+ (1 of 2)', test: r => anyStolen(r) && (r.preset.price || 0) >= 40000 }, { kind: 'deliver', to: DOCKS, text: 'Deliver it to the docks', clean: true },
-          { kind: 'steal', text: 'Steal another car worth $40,000+ (2 of 2)', test: r => anyStolen(r) && (r.preset.price || 0) >= 40000 }, { kind: 'deliver', to: DOCKS, text: 'Deliver it to the docks', clean: true }] },
-      { name: 'Last Run', pay: 100000, brief: 'One more and we\'re done. The stash at the yard. Every cop in the valley will come for it. Get it to the safehouse.',
-        stages: [{ kind: 'goto', to: YARD, foot: true, text: 'Get the stash from the yard on foot' }, { kind: 'heat', level: 5, text: 'Every unit is coming' }, { kind: 'lose', text: 'Lose the police' }, { kind: 'goto', to: SAFE, text: 'Get the stash to the safehouse' }] },
+      { name: 'Wheels', pay: 2000, brief: 'Steal any car and bring it to the garage. No heat.',
+        talk: [[M, 'You the driver Lena told me about? Good. I need wheels for tonight.'], [M, 'Nothing flashy. Take something off the street and bring it to my garage.'], [M, 'And keep the cops out of it.']],
+        stages: [{ kind: 'steal', obj: 'Steal a {car}.', test: anyStolen },
+          { kind: 'deliver', to: GARAGE, obj: 'Take the car to {Marlowe\'s garage}.', clean: true, wreck: 0.7, talk: [[M, 'That\'ll do. Bring it round the back.']] }] },
+      { name: 'Joyride', pay: 5000, brief: 'Deliver a car worth $25,000+ with under 25% damage.',
+        talk: [[M, 'Got a client with taste. He wants something worth twenty-five grand or more.'], [M, 'Not a scratch on it, you hear me? Under a quarter damage or he walks.']],
+        stages: [{ kind: 'steal', obj: 'Steal a car worth {$25,000} or more.', test: r => anyStolen(r) && (r.preset.price || 0) >= 25000 },
+          { kind: 'deliver', to: GARAGE, obj: 'Deliver it to the {garage} in one piece.', maxDamage: 0.25, clean: true, talk: [[M, 'Nice. Easy on the corners.']] }] },
+      { name: 'Hot Pickup', pay: 8000, brief: 'Collect a package, lose the police, bring it back.',
+        talk: [[M, 'There\'s a package at a drop across town. Walk in, pick it up, walk out.'], [L, 'Word is somebody tipped off the cops. Be ready to run.']],
+        stages: [{ kind: 'goto', to: DROP, foot: true, obj: 'Go to the {drop} and collect the package on foot.' },
+          { kind: 'heat', level: 2, text: 'The police were waiting', talk: [[L, 'Told you. Get out of there!']] },
+          { kind: 'lose', obj: 'Lose the {cops}.' },
+          { kind: 'goto', to: GARAGE, obj: 'Bring the package to the {garage}.', talk: [[M, 'You still got it? Good. Come home.']] }] },
+      { name: 'Debt Collection', pay: 11000, brief: 'Find the debtor on the west side and take him out.',
+        talk: [[M, 'Man on the west side owes me. Thirty grand, eight months.'], [M, 'He\'s not going to pay. Make sure the rest of them know what that costs.'], [L, 'He\'s jumpy. If he sees you coming, he\'ll run.']],
+        stages: [{ kind: 'kill', at: HOUSE, obj: 'Find the {debtor} and take him out.', escape: 190 },
+          { kind: 'lose', obj: 'Lose the {cops}.', talk: [[M, 'It\'s done? Then get clear.']] },
+          { kind: 'goto', to: GARAGE, obj: 'Report back to the {garage}.' }] },
+      { name: 'Black and White', pay: 16000, brief: 'Steal a police cruiser and bring it in.',
+        talk: [[M, 'Next job needs a uniform look. I want a police cruiser.'], [M, 'Pull an officer out of one, lose his friends, bring it to me.']],
+        stages: [{ kind: 'steal', obj: 'Steal a {police car}.', test: r => anyStolen(r) && r.preset.id === 'interceptor' },
+          { kind: 'lose', obj: 'Lose the {cops}.', talk: [[L, 'Every cop in the city just heard about that.']] },
+          { kind: 'deliver', to: GARAGE, obj: 'Deliver the cruiser to the {garage}.', clean: true, wreck: 0.75 }] },
+      { name: 'Getaway', pay: 26000, brief: 'Drive the crew from the bank, lose four stars, drop them at the safehouse.',
+        talk: [[L, 'This is the big one. The crew\'s inside the bank. You\'re the wheels.'], [L, 'Be outside, engine running. When we come out, you drive like you mean it.']],
+        stages: [{ kind: 'deliver', to: BANK, obj: 'Wait outside the {bank} in a car.', wait: 6 },
+          { kind: 'heat', level: 4, text: 'The alarm\'s gone off', talk: [[L, 'Go, go, go!'], [L, 'Lose them. All of them.']] },
+          { kind: 'lose', obj: 'Lose the {cops}.' },
+          { kind: 'deliver', to: SAFE, obj: 'Drop the crew at the {safehouse}.', talk: [[L, 'We\'re clear. Safehouse. Now.']] }] },
+      { name: 'Export', pay: 42000, brief: 'Deliver two cars worth $40,000+ to the docks, no heat.',
+        talk: [[M, 'Buyer at the docks wants two cars. Forty grand or better, each.'], [M, 'One at a time. Don\'t bring the cops to my buyer.']],
+        stages: [{ kind: 'steal', obj: 'Steal a car worth {$40,000} or more ({1} of 2).', test: r => anyStolen(r) && (r.preset.price || 0) >= 40000 },
+          { kind: 'deliver', to: DOCKS, obj: 'Take it to the {docks}.', clean: true, wreck: 0.6 },
+          { kind: 'steal', obj: 'Steal another car worth {$40,000} or more ({2} of 2).', test: r => anyStolen(r) && (r.preset.price || 0) >= 40000, talk: [[M, 'He liked it. One more.']] },
+          { kind: 'deliver', to: DOCKS, obj: 'Take it to the {docks}.', clean: true, wreck: 0.6 }] },
+      { name: 'Last Run', pay: 100000, brief: 'Get the stash from the yard to the safehouse with five stars on you.',
+        talk: [[M, 'Last one, kid. The stash at the yard is everything I\'ve got.'], [M, 'Every cop in the valley will be on it the second you touch it.'], [L, 'Get it to the safehouse and we all walk away rich.']],
+        stages: [{ kind: 'goto', to: YARD, foot: true, obj: 'Get the {stash} from the yard on foot.' },
+          { kind: 'heat', level: 5, text: 'Every unit is coming', talk: [[L, 'That\'s the whole department. Move!']] },
+          { kind: 'lose', obj: 'Lose the {cops}.' },
+          { kind: 'goto', to: SAFE, obj: 'Get the stash to the {safehouse}.', talk: [[M, 'You did it. Bring it home.']] }] },
     ];
     const S = career.state.story || (career.state.story = { done: 0 });
-    let job = null, stage = 0, hold = 0, target = null, ui = 0, sellCool = 0, shopOpen = false, coolT = 0, armed = true;
+    let job = null, stage = 0, hold = 0, target = null, hudT = 0, sellCool = 0, shopOpen = false, coolT = 0, armed = true;
     const panel = $('story-job'), title = $('story-name'), step = $('story-step'), arrowEl = $('story-arrow'), dist = $('story-dist');
     const brief = $('story-brief');
 
     function nextJob() { return JOBS[S.done] || null; }
+    const plain = o => (o || '').replace(/[{}]/g, '');
+    const lit = o => (o || '').replace(/\{(.*?)\}/g, '<b>$1</b>');
+    let objT = 0;
     function startJob(j) {
       job = j; stage = 0; hold = 0; target = null;
-      showBrief(`MARLOWE · JOB ${JOBS.indexOf(j) + 1} OF ${JOBS.length}`, j.name, j.brief + `\n\nPays ${money(j.pay)}. Busted or wasted fails the job.`);
+      if (ui) { ui.title(j.name, `Marlowe · job ${JOBS.indexOf(j) + 1} of ${JOBS.length} · ${money(j.pay)}`); ui.talk(j.talk); }
+      else showBrief(`MARLOWE · JOB ${JOBS.indexOf(j) + 1} OF ${JOBS.length}`, j.name, j.brief + `\n\nPays ${money(j.pay)}. Busted or wasted fails the job.`);
       enterStage();
     }
     function enterStage() {
-      const st = job.stages[stage]; hold = 0;
+      const st = job.stages[stage]; hold = 0; objT = 0;
+      if (ui && st.talk) ui.talk(st.talk);
+      if (ui && st.obj) ui.objective(lit(st.obj));
       if (st.kind === 'heat') { police.raise(st.level, st.text, 600 * st.level); return advance(); }
       if (st.kind === 'kill') spawnTarget(st);
     }
@@ -96,8 +131,13 @@
       if (ok) {
         S.done = Math.max(S.done, JOBS.indexOf(j) + 1); career.state.story = S;
         const r = career.earn(j.pay, 250 + JOBS.indexOf(j) * 120);
-        showBrief('JOB COMPLETE', j.name, `${money(r.cash)} · +${r.xp} XP${r.rankUp ? ' · RANK UP' : ''}` + (nextJob() ? `\n\nMarlowe has another job. Come by the garage (yellow M on the map).` : `\n\nThat's the lot. Marlowe has retired, and yours is the name in Ashby Valley now.`));
-      } else { coolT = 8; showBrief('JOB FAILED', j.name, (why || 'It went wrong.') + '\n\nCome back to the garage to try again.'); }
+        const sub = `${money(r.cash)} · +${r.xp} XP${r.rankUp ? ' · RANK UP' : ''}`, next = nextJob() ? 'Marlowe has another job: the yellow M on the map.' : 'That\'s the lot. Marlowe has retired, and yours is the name in Ashby Valley now.';
+        if (onResult) { onResult(true, j.name, sub); crime.say(next, 6); } else showBrief('JOB COMPLETE', j.name, sub + '\n\n' + next);
+      } else {
+        coolT = 8;
+        if (onResult) { onResult(false, j.name, why || 'It went wrong.'); crime.say('Back to the garage to try again.', 5); }
+        else showBrief('JOB FAILED', j.name, (why || 'It went wrong.') + '\n\nCome back to the garage to try again.');
+      }
       missions.refresh?.();
     }
     function spawnTarget(st) {
@@ -117,6 +157,7 @@
       const st = job.stages[stage], ride = getRide();
       if (st.kind === 'steal') { if (st.test(ride)) advance(); }
       else if (st.kind === 'deliver') {
+        if (ride && st.wreck && ride.damage > st.wreck) return finish(false, 'You wrecked the car.');
         if (ride && at(st.to, 9) && Math.hypot(car.vx, car.vz) < 2) {
           if (st.clean && police.state.level > 0) { hold = 0; return; }
           if (st.maxDamage && ride.damage > st.maxDamage) return finish(false, `The car is ${Math.round(ride.damage * 100)}% damaged. The client won't take it.`);
@@ -130,12 +171,13 @@
       else if (st.kind === 'kill') {
         if (!target) { if (Math.hypot(st.at.x - car.x, st.at.z - car.z) < 180) spawnTarget(st); }
         else if (!target.alive) { dropTarget(); advance(); }
-        else if (!crime.peds.includes(target)) dropTarget(); // walked out of range: he's back when you return
+        else if (!crime.peds.includes(target)) { if (target.fled) return finish(false, 'The debtor got away.'); dropTarget(); } // out of range before he saw you: he's back when you return
         else {
           target.tag.position.set(target.x, target.y + 2.4 + Math.sin(performance.now() / 200) * 0.1, target.z);
           // he runs once he sees you coming
           const d = Math.hypot(target.x - car.x, target.z - car.z) || 1;
-          if (d < 22 && !target.flee) { target.flee = true; target.t = -6; target.vx = (target.x - car.x) / d * 4.6; target.vz = (target.z - car.z) / d * 4.6; }
+          if (d < 22 && !target.flee) { target.flee = true; target.fled = true; target.t = -6; target.vx = (target.x - car.x) / d * 4.6; target.vz = (target.z - car.z) / d * 4.6; if (ui) ui.talk([[D, 'No, no, no!']]); }
+          if (target.fled && st.escape && d > st.escape) return finish(false, 'The debtor got away.');
         }
       }
     }
@@ -199,10 +241,12 @@
       if (!armed && !at(GARAGE, 25)) armed = true;
       if (nj && armed && !missions.engine.active && coolT <= 0 && at(GARAGE, 7) && Math.hypot(car.vx, car.vz) < 4) startJob(nj);
       if (job) updateJob(dt);
+      // the objective again if you seem to have lost the thread
+      if (job && ui && (objT += dt) > 45) { objT = 0; const o = job.stages[stage]?.obj; if (o) ui.objective(lit(o)); }
       const g = job ? goalOf(job.stages[stage]) : null;
       goalMark.visible = !!g; if (g) goalMark.position.set(g.x, g.y || 0, g.z);
       // HUD
-      if ((ui += dt) < 0.1) return; ui = 0;
+      if ((hudT += dt) < 0.1) return; hudT = 0;
       const prompt = $('shop-prompt');
       if (prompt) { prompt.hidden = !shopAt || shopOpen; if (shopAt) prompt.innerHTML = `<b>${shopAt.name}</b> Press <kbd>Enter</kbd> to shop`; }
       if (!panel) return;
@@ -210,7 +254,7 @@
       if (job) {
         const st = job.stages[stage], ride = getRide();
         title.textContent = job.name;
-        let t = st.text;
+        let t = plain(st.obj || st.text);
         if (st.kind === 'deliver' && !ride) t += ' (you need a car)';
         else if (st.kind === 'deliver' && st.clean && police.state.level > 0 && at(st.to, 30)) t = 'Lose the police first';
         else if (st.kind === 'deliver' && hold > 0) t = `${st.wait ? 'Waiting' : 'Unloading'}… ${Math.ceil((st.wait || 1.2) - hold)} s`;
@@ -235,7 +279,7 @@
     }
     return {
       update, drawMap, jobs: JOBS, places: { GARAGE, SHOPS, DOCKS, BANK, SAFE, DROP, HOUSE, YARD },
-      get active() { return job; }, get stage() { return stage; }, get shopOpen() { return shopOpen; }, get shopAt() { return shopAt; },
+      get active() { return job; }, get goal() { return job ? goalOf(job.stages[stage]) : null; }, get stage() { return stage; }, get shopOpen() { return shopOpen; }, get shopAt() { return shopAt; },
       get briefOpen() { return !!brief && !brief.hidden; },
       openShop() { if (shopAt) toggleShop(!shopOpen); },
       closeAll() { if (shopOpen) toggleShop(false); if (brief && !brief.hidden) { brief.hidden = true; onPause(); } },
