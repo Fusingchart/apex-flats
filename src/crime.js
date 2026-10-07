@@ -5,10 +5,11 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const mix = (a, b, t) => a + (b - a) * t;
   const WEAPONS = ['FISTS', 'PISTOL', 'SMG', 'SHOTGUN'];
-  const SHIRTS = ['#242830', '#5a2b2b', '#2b4a5a', '#4d5a2b', '#6b5a3a', '#3a3a52', '#7a7468', '#2f5546'];
-  const SKIN = ['#e8bfa0', '#c99a78', '#a8754f', '#7d5236', '#5a3a26'];
 
-  // one set of geometries and a colour-keyed material cache shared by every person (no per-figure GPU allocations)
+  // People. Each figure is a small rig of grouped parts (pelvis > spine > chest > neck > head; shoulder > elbow >
+  // hand; hip > knee > foot) built from shared, smoothly profiled geometry, dressed for an Ashby winter: puffer
+  // jackets, parkas and hoodies, jeans, boots, beanies and scarves, faces with eyes, brows, nose and mouth. Officers
+  // wear navy with a peaked cap, badge and duty belt. animateFigure() drives walk, run, idle, aim and jump.
   let GEO = null;
   const MATS = new Map();
   const mat = (color, extra) => {
@@ -16,48 +17,168 @@
     if (!MATS.has(key)) MATS.set(key, new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.85 }, extra || {})));
     return MATS.get(key);
   };
-  function figure(scene, cop = false, scale = 1, seed = 0) {
-    if (!GEO) GEO = {
-      torso: new THREE.CapsuleGeometry(0.24, 0.52, 4, 8), head: new THREE.SphereGeometry(0.17, 12, 10),
-      hair: new THREE.SphereGeometry(0.175, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.58), thigh: new THREE.CapsuleGeometry(0.105, 0.32, 3, 7),
-      shoe: new THREE.BoxGeometry(0.16, 0.08, 0.28), sleeve: new THREE.CapsuleGeometry(0.075, 0.28, 3, 7),
-      badge: new THREE.BoxGeometry(0.075, 0.085, 0.018), cap: new THREE.CylinderGeometry(0.155, 0.165, 0.09, 12),
-      shin: new THREE.CapsuleGeometry(0.085, 0.3, 3, 7), forearm: new THREE.CapsuleGeometry(0.062, 0.22, 3, 7),
-      hand: new THREE.SphereGeometry(0.06, 8, 6), neck: new THREE.CylinderGeometry(0.07, 0.08, 0.12, 8),
+  const PUFF = new Map();
+  const pufferMat = c => { if (!PUFF.has(c)) PUFF.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, bumpMap: quilt(), bumpScale: 0.18 })); return PUFF.get(c); };
+  // a solid of revolution from (radius, height) pairs: smooth limbs and torsos instead of capsules
+  const lathe = (pts, seg = 14) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+  // quilted puffer fabric: soft horizontal ribs (a tiny canvas bump/colour texture shared by every jacket)
+  let quiltTex = null;
+  function quilt() {
+    if (quiltTex) return quiltTex;
+    const c = document.createElement('canvas'); c.width = 8; c.height = 64; const g = c.getContext('2d');
+    for (let y = 0; y < 64; y++) { const v = 228 + 27 * Math.sin((y / 64) * Math.PI * 2 * 4) ** 2; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(0, y, 8, 1); }
+    quiltTex = new THREE.CanvasTexture(c); quiltTex.wrapS = quiltTex.wrapT = THREE.RepeatWrapping; return quiltTex;
+  }
+  function geos() {
+    if (GEO) return GEO;
+    GEO = {
+      // torso from the waist up to the shoulders (y 0..0.58), flattened front to back
+      chest: lathe([[0.001, 0], [0.165, 0.0], [0.155, 0.12], [0.17, 0.3], [0.2, 0.42], [0.205, 0.5], [0.17, 0.56], [0.08, 0.6], [0.001, 0.6]], 16),
+      puffer: lathe([[0.001, -0.06], [0.19, -0.06], [0.185, 0.1], [0.2, 0.3], [0.23, 0.44], [0.225, 0.52], [0.18, 0.59], [0.09, 0.63], [0.001, 0.63]], 16),
+      pelvis: lathe([[0.001, -0.14], [0.15, -0.14], [0.175, -0.05], [0.17, 0.04], [0.16, 0.08], [0.001, 0.08]], 14),
+      thigh: lathe([[0.001, -0.46], [0.065, -0.46], [0.075, -0.4], [0.09, -0.2], [0.098, -0.05], [0.09, 0.02], [0.001, 0.02]], 12),
+      shin: lathe([[0.001, -0.44], [0.05, -0.44], [0.056, -0.36], [0.068, -0.18], [0.06, -0.04], [0.06, 0.01], [0.001, 0.01]], 12),
+      upper: lathe([[0.001, -0.3], [0.05, -0.3], [0.056, -0.24], [0.062, -0.12], [0.066, -0.02], [0.05, 0.03], [0.001, 0.035]], 10),
+      upperPuff: lathe([[0.001, -0.31], [0.062, -0.31], [0.07, -0.24], [0.078, -0.12], [0.084, -0.02], [0.065, 0.035], [0.001, 0.04]], 10),
+      fore: lathe([[0.001, -0.27], [0.036, -0.27], [0.04, -0.2], [0.048, -0.08], [0.05, 0.0], [0.001, 0.01]], 10),
+      hand: (() => { const g = new THREE.SphereGeometry(0.048, 10, 8); g.scale(0.85, 1.25, 0.55); g.translate(0, -0.05, 0); return g; })(),
+      boot: (() => { const g = new THREE.SphereGeometry(0.07, 12, 8); g.scale(0.85, 0.62, 1.75); g.translate(0, 0.02, 0.05); return g; })(),
+      neck: lathe([[0.001, 0], [0.055, 0], [0.05, 0.1], [0.001, 0.1]], 10),
+      head: (() => { const g = new THREE.SphereGeometry(0.105, 20, 16); g.scale(0.92, 1.12, 1.0); return g; })(),
+      jaw: (() => { const g = new THREE.SphereGeometry(0.075, 14, 10); g.scale(1.05, 0.7, 1.0); return g; })(),
+      eye: new THREE.SphereGeometry(0.014, 8, 6), iris: new THREE.SphereGeometry(0.008, 6, 5),
+      brow: new THREE.BoxGeometry(0.034, 0.007, 0.012), nose: (() => { const g = new THREE.ConeGeometry(0.016, 0.042, 6); g.rotateX(Math.PI / 2.4); return g; })(),
+      mouth: new THREE.BoxGeometry(0.038, 0.006, 0.01), ear: (() => { const g = new THREE.SphereGeometry(0.022, 8, 6); g.scale(0.45, 1, 0.8); return g; })(),
+      hairShort: (() => { const g = new THREE.SphereGeometry(0.109, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.6); g.rotateX(-0.32); return g; })(),
+      hairLong: (() => { const g = new THREE.SphereGeometry(0.118, 16, 12, Math.PI * 0.15, Math.PI * 1.7, 0, Math.PI * 0.78); g.scale(1, 1.25, 1); return g; })(),
+      beanie: lathe([[0.001, 0.13], [0.06, 0.125], [0.1, 0.09], [0.118, 0.03], [0.12, -0.01], [0.122, -0.03], [0.001, -0.03]], 16),
+      scarf: new THREE.TorusGeometry(0.075, 0.032, 8, 16),
+      capCrown: lathe([[0.001, 0.07], [0.1, 0.07], [0.118, 0.0], [0.001, 0.0]], 16), capPeak: (() => { const g = new THREE.CylinderGeometry(0.09, 0.09, 0.01, 12, 1, false, -Math.PI / 2, Math.PI); g.scale(1, 1, 0.7); return g; })(),
+      belt: new THREE.TorusGeometry(0.165, 0.025, 6, 20), badge: new THREE.BoxGeometry(0.05, 0.06, 0.012), hood: (() => { const g = new THREE.TorusGeometry(0.1, 0.045, 8, 16, Math.PI); g.rotateX(Math.PI / 2); return g; })(),
+      // guns: held in the right hand, pointing along the forearm
+      pistol: [[0.03, 0.035, 0.17, 0, 0.0, 0.07, '#18191b'], [0.026, 0.09, 0.04, 0, -0.045, 0.0, '#2a2522']],
+      smg: [[0.04, 0.06, 0.34, 0, 0.0, 0.1, '#1d1f22'], [0.03, 0.12, 0.04, 0, -0.07, 0.04, '#121314'], [0.026, 0.08, 0.04, 0, -0.05, -0.05, '#2a2522'], [0.03, 0.04, 0.14, 0, 0.0, -0.13, '#1d1f22']],
+      shotgun: [[0.035, 0.04, 0.7, 0, 0.01, 0.2, '#26282b'], [0.04, 0.05, 0.18, 0, -0.01, 0.14, '#5a3a22'], [0.04, 0.08, 0.26, 0, -0.03, -0.14, '#5a3a22']],
     };
-    const root = new THREE.Group();
-    const pick = (arr) => arr[Math.abs(Math.floor(seed * 997)) % arr.length];
-    const jacket = mat(cop ? '#1d2e48' : seed ? pick(SHIRTS) : '#3c2a1e');
-    const pants = mat(cop ? '#17243a' : '#30333a');
-    const skin = mat(seed ? pick(SKIN) : '#c99a78');
-    const hair = mat(cop ? '#171717' : '#241b17');
-    const shoes = mat('#101114');
-    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; root.add(o); return o; };
-    const torso = add(GEO.torso, jacket, 0, 1.18, 0);
-    torso.scale.set(1, 0.92, 0.72);
-    add(GEO.head, skin, 0, 1.77, 0.015);
-    add(GEO.neck, skin, 0, 1.63, 0.0);
-    add(GEO.hair, hair, 0, 1.83, -0.018);
-    const legs = [], arms = [];
-    for (const s of [-1, 1]) {
-      const leg = new THREE.Group(); leg.position.set(s * 0.105, 0.86, 0); root.add(leg);
-      const thigh = new THREE.Mesh(GEO.thigh, pants); thigh.position.y = -0.2; thigh.castShadow = true; leg.add(thigh);
-      const shin = new THREE.Mesh(GEO.shin, pants); shin.position.y = -0.56; shin.castShadow = true; leg.add(shin);
-      const shoe = new THREE.Mesh(GEO.shoe, shoes); shoe.position.set(0, -0.79, 0.06); shoe.castShadow = true; leg.add(shoe); legs.push(leg);
-      const arm = new THREE.Group(); arm.position.set(s * 0.27, 1.4, 0); root.add(arm);
-      const sleeve = new THREE.Mesh(GEO.sleeve, jacket); sleeve.position.y = -0.2; sleeve.castShadow = true; arm.add(sleeve); arms.push(arm);
-      const fore = new THREE.Mesh(GEO.forearm, jacket); fore.position.y = -0.5; fore.castShadow = true; arm.add(fore);
-      const hand = new THREE.Mesh(GEO.hand, skin); hand.position.y = -0.7; arm.add(hand);
+    for (const k of ['pistol', 'smg', 'shotgun']) GEO[k] = GEO[k].map(([w, h, d, x, y, z, c]) => ({ g: new THREE.BoxGeometry(w, h, d).translate(x, y, z), c }));
+    return GEO;
+  }
+  const SKIN = ['#f0c8a8', '#dcae8a', '#c08a64', '#9c6a46', '#7a4e32', '#5a3826'];
+  const HAIR = ['#1c1714', '#2e2219', '#4a3424', '#6b4a2e', '#8a6a44', '#b89a6a', '#2a2a2a', '#5e5850'];
+  const JACKET = ['#1f2a36', '#3a2428', '#2c3a2e', '#4a4038', '#1b1d22', '#6b2d2a', '#2f4a5e', '#5a5f66', '#7a6a4a', '#3d3550', '#8a8a86', '#1e3a34'];
+  const TROUSERS = ['#22324a', '#2a3550', '#1f2124', '#3b3a36', '#4a4438', '#28303a'];
+  const HAT = ['#b0302a', '#2a4a7a', '#d8d2c4', '#3a3a3a', '#5e7a3a', '#c9a23a', '#6a3a6a'];
+  // person: { cop, player, seed } -> a Group with userData.rig
+  function figure(scene, cop = false, scale = 1, seed = 0, player = false) {
+    const G = geos();
+    let rs = Math.floor((seed || 0.5) * 2147483646) || 1; const r = () => (rs = (rs * 16807) % 2147483647) / 2147483647;
+    const pick = a => a[Math.floor(r() * a.length)];
+    const female = !cop && !player && r() < 0.45;
+    const style = player ? 'leather' : cop ? 'uniform' : pick(['puffer', 'puffer', 'parka', 'hoodie', 'coat']);
+    const skinC = player ? '#d6a986' : pick(SKIN), hairC = player ? '#1e1814' : pick(HAIR);
+    const jacketC = player ? '#2a1d17' : cop ? '#16223a' : pick(JACKET), trouserC = player ? '#2b3a55' : cop ? '#141c2e' : pick(TROUSERS);
+    const skin = mat(skinC, { roughness: 0.62 }), hairM = mat(hairC, { roughness: 0.9 });
+    const jacket = style === 'puffer' ? pufferMat(jacketC) : mat(jacketC, { roughness: style === 'leather' ? 0.42 : 0.82, metalness: style === 'leather' ? 0.05 : 0 });
+    const trousers = mat(trouserC, { roughness: 0.9 }), boots = mat(player ? '#3a2618' : cop ? '#0b0b0c' : pick(['#2a1e16', '#111214', '#4a3a2a', '#d8d4cc']), { roughness: 0.6 });
+    const white = mat('#f4f1ec', { roughness: 0.3 }), dark = mat('#1a1410', { roughness: 0.5 }), lip = mat('#8a4a44', { roughness: 0.5 });
+    const root = new THREE.Group(), rig = { root };
+    const add = (parent, geo, m, x = 0, y = 0, z = 0, shadow = true) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = shadow; parent.add(o); return o; };
+    const grp = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+    const hipH = 0.94, w = female ? 0.92 : 1;
+    rig.pelvis = grp(root, 0, hipH, 0);
+    add(rig.pelvis, G.pelvis, trousers).scale.set(w * (female ? 1.05 : 1), 1, 0.78);
+    rig.spine = grp(rig.pelvis, 0, 0.07, 0);
+    const puffy = style === 'puffer' || style === 'parka';
+    const torso = add(rig.spine, puffy ? G.puffer : G.chest, jacket); torso.scale.set(w, 1, 0.68);
+    if (style === 'parka' || style === 'coat') add(rig.spine, G.pelvis, jacket, 0, -0.06, 0).scale.set(1.08 * w, 1.6, 0.85); // the skirt of a long coat
+    if (style === 'hoodie') add(rig.spine, G.hood, jacket, 0, 0.6, -0.06);
+    if (cop) { add(rig.pelvis, G.belt, mat('#0e0e10', { roughness: 0.5 }), 0, 0.02, 0).rotation.x = Math.PI / 2; add(rig.spine, G.badge, mat('#d7ba65', { metalness: 0.6, roughness: 0.35 }), 0.085, 0.43, 0.135); }
+    rig.neck = grp(rig.spine, 0, 0.58, 0.0);
+    add(rig.neck, G.neck, skin);
+    if (!cop && r() < 0.45) add(rig.neck, G.scarf, mat(pick(HAT), { roughness: 0.95 }), 0, 0.03, 0.01).rotation.x = Math.PI / 2;
+    rig.head = grp(rig.neck, 0, 0.19, 0.01);
+    add(rig.head, G.head, skin);
+    add(rig.head, G.jaw, skin, 0, -0.06, 0.018);
+    // the face (hidden past ~30 m)
+    const face = grp(rig.head, 0, 0, 0); rig.face = face;
+    for (const sx of [-1, 1]) {
+      add(face, G.eye, white, sx * 0.034, 0.018, 0.088, false);
+      add(face, G.iris, dark, sx * 0.034, 0.018, 0.1, false);
+      add(face, G.brow, hairM, sx * 0.035, 0.045, 0.094, false).rotation.z = sx * -0.12;
+      add(rig.head, G.ear, skin, sx * 0.1, 0.0, 0.0, false);
     }
-    if (cop) {
-      const badge = new THREE.Mesh(GEO.badge, mat('#d7ba65', { metalness: 0.45, roughness: 0.5 }));
-      badge.position.set(0.105, 1.38, 0.18); root.add(badge);
-      const cap = new THREE.Mesh(GEO.cap, jacket); cap.position.y = 1.94; root.add(cap);
+    add(face, G.nose, skin, 0, -0.008, 0.11, false);
+    add(face, G.mouth, lip, 0, -0.052, 0.088, false);
+    // hair or a hat
+    const hat = cop ? 'cap' : player ? 'short' : pick(female ? ['long', 'long', 'beanie', 'beanie'] : ['short', 'short', 'beanie', 'beanie', 'bald']);
+    if (hat === 'short') add(rig.head, G.hairShort, hairM, 0, 0.012, -0.006).scale.set(0.96, 1.08, 1.02);
+    if (hat === 'long') { add(rig.head, G.hairShort, hairM, 0, 0.022, -0.008).scale.set(1.02, 0.92, 1.08); add(rig.head, G.hairLong, hairM, 0, -0.06, -0.02); }
+    if (hat === 'beanie') add(rig.head, G.beanie, mat(pick(HAT), { roughness: 0.95 }), 0, 0.03, -0.004);
+    if (hat === 'cap') { const cm = mat('#101828', { roughness: 0.6 }); add(rig.head, G.capCrown, cm, 0, 0.055, -0.01); add(rig.head, G.capPeak, mat('#0a0a0a', { roughness: 0.3 }), 0, 0.06, 0.1); add(rig.head, G.badge, mat('#d7ba65', { metalness: 0.6 }), 0, 0.1, 0.1).scale.set(0.6, 0.6, 1); }
+    // arms: shoulder > upper arm > elbow > forearm > hand
+    rig.arms = []; rig.elbows = []; rig.hands = [];
+    for (const sx of [-1, 1]) {
+      const sh = grp(rig.spine, sx * (puffy ? 0.215 : 0.2) * w, 0.5, 0);
+      add(sh, puffy ? G.upperPuff : G.upper, jacket);
+      const el = grp(sh, 0, -0.29, 0);
+      add(el, puffy ? G.upperPuff : G.fore, jacket).scale.set(puffy ? 0.85 : 1, puffy ? 0.88 : 1, puffy ? 0.85 : 1);
+      const hd = grp(el, 0, -0.27, 0);
+      add(hd, G.hand, cop || puffy ? mat('#141416', { roughness: 0.8 }) : skin); // gloves in the cold
+      sh.rotation.z = sx * 0.06;
+      rig.arms.push(sh); rig.elbows.push(el); rig.hands.push(hd);
     }
-    root.scale.setScalar(scale);
-    root.userData = { legs, arms, torso, cop };
+    // legs: hip > thigh > knee > shin > boot
+    rig.legs = []; rig.knees = [];
+    for (const sx of [-1, 1]) {
+      const hp = grp(rig.pelvis, sx * 0.09 * w, -0.06, 0);
+      add(hp, G.thigh, trousers);
+      const kn = grp(hp, 0, -0.44, 0);
+      add(kn, G.shin, trousers);
+      add(kn, G.boot, boots, 0, -0.44, 0.02);
+      rig.legs.push(hp); rig.knees.push(kn);
+    }
+    // a gun for each weapon, in the right hand (shown by animateFigure)
+    rig.guns = [null];
+    for (const k of ['pistol', 'smg', 'shotgun']) {
+      const g = new THREE.Group(); for (const p of G[k]) add(g, p.g, mat(p.c, { roughness: 0.45, metalness: 0.4 }), 0, 0, 0, false);
+      g.position.set(0, -0.08, 0.02); g.rotation.x = Math.PI / 2; // barrel out past the fingers g.visible = false; rig.hands[0].add(g); rig.guns.push(g); // [0] is the right hand
+    }
+    root.scale.setScalar(scale * (female ? 0.95 : 1));
+    root.userData = { rig, legs: rig.legs, arms: rig.arms, cop };
     scene.add(root);
     return root;
+  }
+  // Pose a figure. o: { phase, gait 0..1 (walk) to 2 (sprint), aim 0..1, weapon, air, t }
+  function animateFigure(fig, o) {
+    const R = fig.userData.rig; if (!R) return;
+    const ph = o.phase || 0, g = Math.min(1, o.gait || 0), run = clamp((o.gait || 0) - 1, 0, 1), aim = o.aim || 0;
+    const sw = Math.sin(ph), cw = Math.cos(ph);
+    // legs: thighs swing, knees fold on the swing-through, more when running
+    for (let i = 0; i < 2; i++) {
+      const s = i ? -sw : sw, c = i ? -cw : cw;
+      R.legs[i].rotation.x = o.air ? (i ? 0.5 : -0.9) : -s * (0.5 + 0.25 * run) * g;
+      R.knees[i].rotation.x = o.air ? (i ? 0.6 : 1.1) : (0.08 + Math.max(0, c) * (0.75 + 0.6 * run)) * g + 0.04;
+    }
+    // hips bob twice a stride; the body leans into a run and twists against the legs
+    R.pelvis.position.y = 0.94 + (Math.abs(cw) * 0.035 - 0.02) * g - 0.03 * run;
+    R.spine.rotation.x = 0.06 * g + 0.16 * run - 0.02 * aim;
+    R.spine.rotation.y = sw * 0.09 * g * (1 - aim);
+    R.head.rotation.y = -sw * 0.05 * g;
+    // breathing when still
+    const breathe = Math.sin((o.t || 0) * 1.6) * 0.012 * (1 - g);
+    R.spine.scale.set(1, 1 + breathe, 1 + breathe * 2);
+    // arms: swing opposite the legs, elbows bent; aiming raises both towards the target
+    for (let i = 0; i < 2; i++) {
+      const s = i ? sw : -sw;
+      const swingX = s * (0.4 + 0.45 * run) * g, elbow = -(0.25 + 0.9 * run * g);
+      // aiming: the gun arm (right, [0]) straight out, the other hand comes across to steady it
+      const aimX = i ? -1.25 : -1.52, aimZ = i ? -0.42 : 0.08, aimEl = i ? -0.3 : 0;
+      R.arms[i].rotation.x = swingX * (1 - aim) + aimX * aim;
+      R.arms[i].rotation.z = (i ? 0.06 : -0.06) * (1 - aim) + aimZ * aim * (o.weapon ? 1 : 0);
+      R.elbows[i].rotation.x = elbow * (1 - aim) + aimEl * aim;
+    }
+    for (let k = 1; k < R.guns.length; k++) R.guns[k].visible = o.weapon === k;
+    if (R.face) R.face.visible = o.near !== false;
   }
 
   // Gunfire you can see: tracer streaks, muzzle flashes, and what the bullet hit (sparks off metal, dust, blood)
@@ -113,16 +234,18 @@
     };
   }
 
-  window.createCrimeMode = function ({ scene, camera, city, traffic, police, player, solidsNear, addSolid, career, presets, pickPreset, makeCarMesh, onCrime, onEnterCar, onPlayerWasted, snapshotVehicle, onCopShoot }) {
+  window.createCrimeMode = function ({ scene, camera, city, traffic, police, player, solidsNear, addSolid, career, presets, pickPreset, makeCarMesh, onGunFx, onCrime, onEnterCar, onPlayerWasted, snapshotVehicle, onCopShoot }) {
     const fx = createFX(scene);
-    const foot = { x: city.start.x, y: city.start.y || 0, z: city.start.z, h: city.start.h, vx: 0, vz: 0, hp: 100, armor: 0, alive: true };
-    const avatar = figure(scene, false, 1, 0);
+    const foot = { x: city.start.x, y: city.start.y || 0, z: city.start.z, h: city.start.h, vx: 0, vz: 0, hp: 100, armor: 0, alive: true, jy: 0, vy: 0 };
+    const avatar = figure(scene, false, 1, 0.37, true);
     avatar.visible = false;
     const peds = [], parked = [];
     const raycaster = new THREE.Raycaster(), center = new THREE.Vector2(0, 0), targets = [];
     const tmp = new THREE.Vector3();
     let active = false, aiming = false, fireHeld = false, weapon = 1, fireT = 0, reloadT = 0, yaw = foot.h, pitch = 0.06, walkPhase = 0, message = '', messageT = 0, pedAcc = 0, uiAcc = 0;
-    let lookYaw = yaw, pick = null, hurtT = 99, spawnT = 0, entering = false;
+    let recoil = 0, shake = 0;
+    let lookYaw = yaw, pick = null, hurtT = 99, spawnT = 0, entering = false, jumpHeld = false, aimBlend = 0;
+    const gaitOf = sp => sp < 2 ? sp / 1.4 : 1 + (sp - 2) / 4; // 1: a walk, 2+: running
     const ammo = [{ mag: Infinity, res: Infinity }, { mag: 12, res: 72 }, { mag: 30, res: 180 }, { mag: 8, res: 32 }];
     const status = document.getElementById('crime-status');
     const prompt = document.getElementById('crime-prompt');
@@ -158,10 +281,10 @@
       }
       return false;
     }
-    function legalFoot(x, z) {
+    function legalFoot(x, z, lift = 0) {
       const y = city.heightAt(x, z, foot.y);
       if (!Number.isFinite(y) || city.surfaceAt(x, z, y) === 'water') return false;
-      return !blocked(x, z, y, 0.32);
+      return !blocked(x, z, y + lift, 0.32); // mid-jump you clear low walls, hedges and car bonnets
     }
     // knocked down by traffic while on foot
     player.onHitByCar = (v, sp) => {
@@ -181,9 +304,9 @@
     }
     function enterFoot(pose) {
       active = true; entering = false; pick = null;
-      foot.x = pose.x; foot.z = pose.z; foot.y = city.heightAt(pose.x, pose.z, pose.y || 0); foot.h = pose.h || yaw; foot.vx = foot.vz = 0; foot.alive = true;
+      foot.x = pose.x; foot.z = pose.z; foot.y = city.heightAt(pose.x, pose.z, pose.y || 0); foot.h = pose.h || yaw; foot.vx = foot.vz = 0; foot.alive = true; foot.jy = foot.vy = 0;
       if (foot.hp <= 0) foot.hp = 100;
-      yaw = lookYaw = foot.h; pitch = 0.06; avatar.visible = true; syncProxy(); updateMarker();
+      yaw = lookYaw = foot.h; pitch = 0.06; avatar.visible = true; avatar.rotation.x = 0; syncProxy(); updateMarker();
       document.body.classList.add('on-foot');
       if (status) { status.hidden = false; status.textContent = statusText(); }
       if (prompt) prompt.hidden = false;
@@ -304,7 +427,7 @@
     function mark(dt) {
       if (messageT > 0) { messageT -= dt; if (messageT <= 0) message = ''; }
       if (!prompt) return;
-      if (!active) { prompt.hidden = true; return; }
+      if (!active) { prompt.hidden = !message; if (message) prompt.textContent = message; return; } // at the wheel: messages only
       const t = currentTarget();
       prompt.hidden = false;
       if (pick) { prompt.textContent = `Picking the lock · ${Math.round((pick.t / pick.need) * 100)}% · keep holding F`; return; }
@@ -315,7 +438,7 @@
       if (t.record.owned || !t.record.locked) prompt.textContent = `F  Get in · ${name}`;
       else prompt.textContent = `Hold F to pick the lock · G to smash the window · ${name} · $${(t.preset.price || 0).toLocaleString()}`;
     }
-    function updateMarker() { avatar.position.set(foot.x, foot.y, foot.z); avatar.rotation.y = foot.h; }
+    function updateMarker() { avatar.position.set(foot.x, foot.y + (foot.jy || 0), foot.z); avatar.rotation.y = foot.h; }
     function fleeDriver(v) {
       if (!v || v.driverMesh?.visible === false) return;
       if (v.driverMesh) v.driverMesh.visible = false;
@@ -374,7 +497,8 @@
       }
       if (reloadT > 0) return;
       if (a.mag <= 0) { if (a.res > 0) { reloadT = weapon === 3 ? 1.6 : 1.25; say('Reloading'); } else say('Out of ammo'); return; }
-      a.mag--; fireT = weapon === 3 ? 0.72 : weapon === 2 ? 0.09 : 0.38;
+      a.mag--; fireT = weapon === 3 ? 0.72 : weapon === 2 ? 0.09 : 0.3;
+      if (!a.mag && a.res > 0) { reloadT = weapon === 3 ? 1.6 : 1.25; say('Reloading', 1); } // empty: reload straight away
       targets.length = 0;
       for (const p of peds) if (p.alive && p.mesh.visible) targets.push(p.mesh);
       for (const v of traffic.vehicles) if (v.state !== 'idle' && v.group.visible) targets.push(v.group);
@@ -383,6 +507,9 @@
       // the shot leaves the gun in your right hand
       const fx0 = Math.sin(yaw), fz0 = Math.cos(yaw), mx = foot.x + fx0 * 0.55 - Math.cos(yaw) * 0.22, my = foot.y + 1.42, mz = foot.z + fz0 * 0.55 + Math.sin(yaw) * 0.22;
       fx.flash(mx, my, mz);
+      // the kick: the view jumps up and settles, harder for the shotgun; the gun sounds and the pad rumbles
+      recoil += weapon === 3 ? 0.085 : weapon === 2 ? 0.022 : 0.045; shake = Math.max(shake, weapon === 3 ? 0.5 : 0.2);
+      onGunFx?.(weapon, 0);
       const pellets = weapon === 3 ? 6 : 1, spread = weapon === 3 ? 0.05 : weapon === 2 ? 0.018 : 0.006;
       const hitPeds = new Set();
       for (let k = 0; k < pellets; k++) {
@@ -398,7 +525,7 @@
         while (n && !n.userData.ped && !n.userData.vehicle) n = n.parent;
         if (n?.userData.ped) {
           const p = n.userData.ped; fx.impact(end.x, end.y, end.z, 'blood');
-          p.hp -= weapon === 3 ? 16 : weapon === 2 ? 14 : 30;
+          p.hp -= weapon === 3 ? 20 : weapon === 2 ? 20 : 34; hitMark();
           if (p.hp <= 0) killPed(p, 'player'); else if (!hitPeds.has(p)) { hitPeds.add(p); onCrime(p.cop ? 'hurtCop' : 'assault', { ped: p }); }
         } else if (n?.userData.vehicle) {
           const v = n.userData.vehicle; fx.impact(end.x, end.y, end.z, 'spark');
@@ -427,6 +554,7 @@
     }
     function updateFixed(dt, keys) {
       if (!active) return;
+      if (!foot.alive) { avatar.rotation.x = -Math.PI / 2; avatar.position.y = foot.y + 0.25; return; } // down
       if (fireT > 0) fireT -= dt;
       if (reloadT > 0) { reloadT -= dt; if (reloadT <= 0 && weapon > 0) { const a = ammo[weapon], cap = weapon === 3 ? 8 : weapon === 2 ? 30 : 12, take = Math.min(cap - a.mag, a.res); a.mag += take; a.res -= take; } }
       if (pick) {
@@ -441,23 +569,27 @@
       let mx = fx * fwd + rx * side, mz = fz * fwd + rz * side;
       const ml = Math.hypot(mx, mz);
       if (ml > 0) { mx /= ml; mz /= ml; }
-      const speed = aiming ? 2.6 : keys.ShiftLeft || keys.ShiftRight ? 6.6 : 4.0;
-      foot.vx = mix(foot.vx, mx * speed, Math.min(1, dt * 12)); foot.vz = mix(foot.vz, mz * speed, Math.min(1, dt * 12));
+      // jog by default, sprint with Shift, walk while aiming; in the air you keep your momentum
+      const speed = aiming ? 3.2 : keys.ShiftLeft || keys.ShiftRight ? 8.4 : 5.6, grip = foot.jy > 0 ? 1.5 : 12;
+      foot.vx = mix(foot.vx, mx * speed, Math.min(1, dt * grip)); foot.vz = mix(foot.vz, mz * speed, Math.min(1, dt * grip));
+      // jump (Space): a separate height above the ground, so foot.y always stays the ground you're over
+      if (keys.Space && !foot.jy && !foot.vy && !pick && !entering) { foot.vy = 5.4; if (!jumpHeld) jumpHeld = true; }
+      if (!keys.Space) jumpHeld = false;
+      if (foot.vy || foot.jy) { foot.vy -= 15 * dt; foot.jy = Math.max(0, foot.jy + foot.vy * dt); if (!foot.jy && foot.vy < 0) foot.vy = 0; }
       const nx = foot.x + foot.vx * dt, nz = foot.z + foot.vz * dt;
-      if (legalFoot(nx, foot.z)) foot.x = nx; else foot.vx = 0;
-      if (legalFoot(foot.x, nz)) foot.z = nz; else foot.vz = 0;
+      if (legalFoot(nx, foot.z, foot.jy)) foot.x = nx; else foot.vx = 0;
+      if (legalFoot(foot.x, nz, foot.jy)) foot.z = nz; else foot.vz = 0;
       foot.y = city.heightAt(foot.x, foot.z, foot.y);
       if (aiming || fireHeld) yaw = lookYaw;
       else if (Math.hypot(foot.vx, foot.vz) > 0.15) yaw = Math.atan2(foot.vx, foot.vz);
       foot.h = yaw;
-      walkPhase += dt * Math.hypot(foot.vx, foot.vz) * 1.8;
-      const gait = Math.min(1, Math.hypot(foot.vx, foot.vz) / 4);
-      avatar.userData.legs[0].rotation.x = Math.sin(walkPhase) * 0.48 * gait;
-      avatar.userData.legs[1].rotation.x = -Math.sin(walkPhase) * 0.48 * gait;
-      avatar.userData.arms[0].rotation.x = aiming ? -1.45 : -Math.sin(walkPhase) * 0.32 * gait;
-      avatar.userData.arms[1].rotation.x = aiming ? -1.3 : Math.sin(walkPhase) * 0.32 * gait;
+      const fsp = Math.hypot(foot.vx, foot.vz);
+      walkPhase += dt * fsp * Math.PI * 2 / (1.4 + 0.12 * fsp);
+      aimBlend = mix(aimBlend, aiming || fireHeld ? 1 : 0, Math.min(1, dt * 12));
+      animateFigure(avatar, { phase: walkPhase, gait: gaitOf(fsp), aim: weapon ? aimBlend : 0, weapon, air: foot.jy > 0.05, t: performance.now() / 1000 });
       uiAcc += dt; syncProxy(); updateMarker();
       if (uiAcc >= 0.1) { mark(uiAcc); uiAcc = 0; if (status) status.textContent = statusText(); }
+      if (dt > 0) aimAssist(dt);
       if (fireHeld && dt > 0) fire(); // never from a paused frame (menus)
     }
     // runs every frame whether you're on foot or driving: pedestrians, run-overs, parked cars
@@ -483,7 +615,7 @@
         const tx = home ? home.x : p.x + p.vx, tz = home ? home.z : p.z + p.vz, hd = Math.hypot(tx - p.x, tz - p.z);
         if (!home || hd < 2.2 || d > 90) { scene.remove(p.mesh); peds.splice(i, 1); if (home && home.driverMesh) home.driverMesh.visible = true; if (home) home.deployed = false; return; }
         p.vx = (tx - p.x) / hd * 2.2; p.vz = (tz - p.z) / hd * 2.2;
-        if (arms) arms[0].rotation.x = arms[1].rotation.x = 0;
+
       } else {
         const los = d < 70 && Math.abs(player.y - p.y) < 4 && traffic.police.sightClear(p.x, p.z, player.x, player.z, p.y);
         const shoot = (L >= 2 || player.armed) && los && d < 42;
@@ -495,7 +627,7 @@
         const run = !los || d > (shoot && !pinned ? 16 : 1.1);
         const sp = p.aimT > 0 ? 1.2 : 5.6;
         p.vx = run ? dx / d * sp : 0; p.vz = run ? dz / d * sp : 0;
-        if (arms) { const up = p.aimT > 0 ? -1.45 : 0; arms[0].rotation.x = up; arms[1].rotation.x = up * 0.9; }
+
         if (p.aimT > 0) p.mesh.rotation.y = Math.atan2(dx, dz);
         // hands on: on foot (and not sprinting clear) or sat in a stopped car with the door open
         if (d < 1.9 && ((!driving && Math.hypot(foot.vx, foot.vz) < 5) || (driving && Math.hypot(player.vx, player.vz) < 1.5))) police.arrest(step);
@@ -508,13 +640,27 @@
         if (!blocked(ax, az, p.y, 0.3)) { p.x = ax; p.z = az; } else p.side = -p.side;
       }
     }
+    // everyone near enough to see moves every frame (the AI itself thinks at 20 Hz)
+    function animatePeds(dt) {
+      const now = performance.now() / 1000, L = police.state.level;
+      for (const p of peds) {
+        if (!p.alive) continue;
+        const d = Math.hypot(p.x - camera.position.x, p.z - camera.position.z);
+        if (d > 110) continue;
+        const sp = Math.hypot(p.vx, p.vz);
+        p.walk = (p.walk || p.phase) + dt * sp * Math.PI * 2 / (1.4 + 0.12 * sp);
+        p.aimB = mix(p.aimB || 0, p.cop && p.aimT > 0 ? 1 : 0, Math.min(1, dt * 10));
+        animateFigure(p.mesh, { phase: p.walk, gait: gaitOf(sp), aim: p.aimB, weapon: p.cop && L > 0 ? 1 : 0, t: now + p.phase, near: d < 32 });
+      }
+    }
     function updateWorld(dt, driving, carSpeed) {
       pedAcc += dt; spawnT -= dt;
+      if (dt > 0) animatePeds(dt);
       fx.update(dt);
       if (spawnT <= 0) { spawnT = 1; pedSpawn(); spawnParked(); }
       hurtT += dt;
       if (hurtT > 6 && foot.hp < 100) foot.hp = Math.min(100, foot.hp + dt * 4);
-      if (!active && status && (uiAcc += dt) > 0.25) { uiAcc = 0; status.textContent = `HEALTH ${Math.round(foot.hp)}` + (foot.armor > 0 ? ` · ARMOUR ${Math.round(foot.armor)}` : ''); }
+      if (!active && status && (uiAcc += dt) > 0.25) { mark(uiAcc); uiAcc = 0; status.textContent = `HEALTH ${Math.round(foot.hp)}` + (foot.armor > 0 ? ` · ARMOUR ${Math.round(foot.armor)}` : ''); }
       // ammo dropped by fallen officers: walk over it
       for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i]; d.t += dt; d.m.rotation.y += dt * 2;
@@ -562,7 +708,7 @@
         const sp = Math.hypot(p.vx, p.vz);
         if (sp > 0.1) p.mesh.rotation.y = Math.atan2(p.vx, p.vz);
         const ud = p.mesh.userData;
-        if (ud.legs) { const k = Math.sin(performance.now() / (p.flee ? 110 : 220) + p.phase) * Math.min(1, sp / 2) * 0.5; ud.legs[0].rotation.x = k; ud.legs[1].rotation.x = -k; }
+
         // getting hit by your car
         if (driving && carSpeed > 4.5 && Math.hypot(p.x - player.x, p.z - player.z) < 1.9 && Math.abs(p.y - player.y) < 2) {
           killPed(p, 'car');
@@ -572,17 +718,49 @@
       }
     }
     function setWeapon(n) { weapon = clamp(n | 0, 0, 3); player.armed = weapon > 0; reloadT = 0; if (status) status.textContent = statusText(); }
+    // Aim assist (GTA's soft lock): while aiming, the view eases onto the nearest person close to the crosshair.
+    // The crosshair goes red over someone; a white flash marks a hit.
+    const cross = document.getElementById('crosshair'), camDir = new THREE.Vector3();
+    let lockT = 0, lockOn = null;
+    function hitMark() { if (!cross) return; cross.classList.add('hit'); clearTimeout(hitMark.t); hitMark.t = setTimeout(() => cross.classList.remove('hit'), 140); }
+    function aimAssist(dt) {
+      if ((lockT -= dt) <= 0) {
+        lockT = 0.1; lockOn = null;
+        if (aiming && weapon > 0) {
+          camera.getWorldDirection(camDir);
+          const cy0 = Math.atan2(camDir.x, camDir.z);
+          let best = 0.22;
+          for (const p of peds) {
+            if (!p.alive || p.mesh.visible === false) continue;
+            const dx = p.x - camera.position.x, dz = p.z - camera.position.z, d = Math.hypot(dx, dz);
+            if (d > 55 || d < 2) continue;
+            let a = Math.atan2(dx, dz) - cy0; a = Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) - (p.cop && police.state.level ? 0.06 : 0);
+            if (a < best && traffic.police.sightClear(foot.x, foot.z, p.x, p.z, foot.y)) { best = a; lockOn = p; }
+          }
+        }
+        cross?.classList.toggle('target', !!lockOn);
+      }
+      if (!lockOn || !aiming) return;
+      camera.getWorldDirection(camDir);
+      const tx = lockOn.x - camera.position.x, ty = lockOn.y + 1.25 - camera.position.y, tz = lockOn.z - camera.position.z, th = Math.hypot(tx, tz);
+      let dy = Math.atan2(tx, tz) - Math.atan2(camDir.x, camDir.z); dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      const de = Math.atan2(ty, th) - Math.asin(clamp(camDir.y, -1, 1));
+      const k = Math.min(1, dt * 9);
+      lookYaw += dy * k; pitch = clamp(pitch - de * k, -0.55, 0.7);
+    }
     function mouseMove(dx, dy) { if (!active) return; lookYaw -= dx * 0.0026; pitch = clamp(pitch + dy * 0.0022, -0.55, 0.7); }
     function mouseButton(button, down) { if (!active) return; if (button === 0) fireHeld = down; if (button === 2) aiming = down; }
     function updateCamera(dt) {
       if (!active) return false;
-      const cp = Math.cos(pitch), sp = Math.sin(pitch), bx = Math.sin(lookYaw) * cp, bz = Math.cos(lookYaw) * cp;
+      recoil *= Math.exp(-dt * 9); shake *= Math.exp(-dt * 14);
+      const pt = pitch - recoil, cp = Math.cos(pt), sp = Math.sin(pt), bx = Math.sin(lookYaw) * cp, bz = Math.cos(lookYaw) * cp;
       const rx = -Math.cos(lookYaw), rz = Math.sin(lookYaw), shoulder = aiming ? 0.55 : 0.35;
-      const targetX = foot.x + rx * shoulder, targetY = foot.y + 1.55, targetZ = foot.z + rz * shoulder;
+      const targetX = foot.x + rx * shoulder, targetY = foot.y + 1.55 + (foot.jy || 0) * 0.6, targetZ = foot.z + rz * shoulder;
       const dist = aiming ? 2.4 : 4.4, height = aiming ? 0.15 : 0.55;
       tmp.set(targetX - bx * dist, targetY + height + sp * dist, targetZ - bz * dist);
       const gy = city.heightAt(tmp.x, tmp.z, foot.y); if (tmp.y < gy + 0.5) tmp.y = gy + 0.5;
       camera.position.lerp(tmp, 1 - Math.exp(-dt * (aiming ? 14 : 8)));
+      if (shake > 0.01) camera.position.add(tmp.set((Math.random() - 0.5) * shake * 0.12, (Math.random() - 0.5) * shake * 0.12, (Math.random() - 0.5) * shake * 0.12));
       camera.lookAt(targetX + bx * 30, targetY - sp * 20, targetZ + bz * 30);
       camera.fov = mix(camera.fov, aiming ? 50 : 65, 1 - Math.exp(-dt * 7)); camera.updateProjectionMatrix();
       return true;
@@ -612,6 +790,8 @@
       startAt: enterFoot, setDriving: enterCar, updateFixed, updateWorld, updateCamera, mouseMove, mouseButton, fire, setWeapon, interact, breakWindow,
       addParked, removeParked, currentTarget, addPed, pavementNear, fx, say,
       heal() { foot.hp = 100; foot.alive = true; },
+      clearCops() { for (let i = peds.length - 1; i >= 0; i--) if (peds[i].cop) { scene.remove(peds[i].mesh); peds.splice(i, 1); } },
+      reload() { const a = ammo[weapon]; if (weapon > 0 && !reloadT && a.res > 0 && a.mag < (weapon === 3 ? 8 : weapon === 2 ? 30 : 12)) { reloadT = weapon === 3 ? 1.6 : 1.25; say('Reloading', 1); } },
       get armor() { return foot.armor; },
       addArmor(n) { foot.armor = Math.min(100, foot.armor + n); },
       refillAmmo() { ammo[1].res = Math.max(ammo[1].res, 120); ammo[2].res = Math.max(ammo[2].res, 300); ammo[3].res = Math.max(ammo[3].res, 48); if (status && active) status.textContent = statusText(); },
@@ -632,7 +812,7 @@
         const hit = Math.random() < clamp(0.62 - d * 0.009 - sp * 0.045 + L * 0.03, 0.08, 0.8);
         const sy = (sh.y || 0) + 1.35, miss = hit ? 0.2 : 1.6;
         const ax = foot.x + (Math.random() - 0.5) * miss, az = foot.z + (Math.random() - 0.5) * miss, ay = foot.y + (hit ? 1.2 : Math.random() * 1.6);
-        fx.flash(sh.x, sy, sh.z); fx.tracer(sh.x, sy, sh.z, ax, ay, az);
+        fx.flash(sh.x, sy, sh.z); fx.tracer(sh.x, sy, sh.z, ax, ay, az); onGunFx?.(-1, d);
         if (hit) { fx.impact(ax, ay, az, 'blood'); fx.flashDamage(); api.hurt(6 + L * 2); }
         else fx.impact(ax, city.heightAt(ax, az, foot.y) + 0.05, az, 'dust');
       },

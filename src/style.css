@@ -38,7 +38,7 @@ body { background: var(--ground); color: var(--ink); font-family: var(--mono); -
 #damage { padding: 8px 8px 6px; display: grid; gap: 4px; justify-items: center; width: 106px; }
 #dmg { width: 90px; height: 130px; display: block; }
 #lost { font-size: 9.5px; line-height: 1.3; color: var(--dim); text-align: center; text-wrap: balance; }
-#map { top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; width: 170px; height: 170px; border-radius: 50%; }
+#map { top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; width: 240px; height: 155px; border-radius: 14px; }
 #impact { position: fixed; left: 50%; top: calc(18% + 40px); transform: translateX(-50%); padding: 8px 14px; border-radius: 8px; background: rgba(18,16,24,0.7); border: 1px solid rgba(255,90,78,0.5); font: 600 16px/1 var(--display); letter-spacing: 0.08em; white-space: nowrap; opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 2; font-variant-numeric: tabular-nums; }
 #impact b { color: var(--red); margin-right: 6px; }
 #impact span { color: var(--dim); }
@@ -79,7 +79,7 @@ body.touch #brand { display: none; }
   #telemetry { font-size: 11px; }
   #telemetry dt:nth-of-type(n+3):nth-of-type(-n+4), #telemetry dd:nth-of-type(n+3):nth-of-type(-n+4) { display: none; }
   #damage { width: 76px; } #dmg { width: 64px; height: 92px; }
-  #map { width: 120px; height: 120px; }
+  #map { width: 180px; height: 116px; }
   #touch { padding-bottom: calc(200px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { #drift, #impact { transition: none; } }
@@ -154,3 +154,89 @@ button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allo
 #shop-prompt b { color: #4fa3ff; margin-right: 8px; }
 #shop-prompt kbd { color: #4fa3ff; }
 @media (max-width: 1000px) { #story-job { top: 300px; left: 16px; right: auto; width: 260px; } }
+
+/* ---------- Street HUD (default; H switches to the detailed driving HUD) ---------- */
+#vitals, #hud-tr { display: none; }
+body.gta:not(.show-keys) #brand, body.gta #left, body.gta #crime-status, body.gta #tach { display: none !important; }
+body.gta #map { top: auto; right: auto; left: 16px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); width: 300px; height: 193px; box-shadow: 0 6px 22px rgba(0,0,0,0.45); }
+body.gta #vitals { display: flex; gap: 4px; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 300px; }
+#vitals .bar { flex: 1; height: 12px; border-radius: 2px; background: rgba(10,10,12,0.6); border: 1px solid rgba(255,255,255,0.12); overflow: hidden; }
+#vitals i { display: block; height: 100%; width: 100%; transition: width 0.25s; }
+#hp-bar { background: linear-gradient(#7fd88c, #4fae5f); }
+#hp-bar.low { background: linear-gradient(#ff6b5e, #c9362b); animation: hp-blink 0.8s infinite; }
+#ar-bar { background: linear-gradient(#78b8ff, #3d86d8); }
+@keyframes hp-blink { 50% { opacity: 0.45; } }
+body.gta #wanted { top: calc(14px + env(safe-area-inset-top, 0px)); right: 18px; width: auto; text-align: right; }
+body.gta #stars { font-size: 30px; letter-spacing: 3px; }
+body.gta #bounty { font-size: 11px; margin-top: 1px; }
+body.gta #hud-tr { display: block; top: calc(62px + env(safe-area-inset-top, 0px)); right: 18px; text-align: right; }
+#hud-cash { font: 700 30px/1 var(--display); color: #f4f1ea; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; text-shadow: 0 0 2px #000, 0 2px 8px rgba(0,0,0,0.75); }
+#hud-delta { height: 20px; margin-top: 3px; font: 700 18px/1 var(--display); opacity: 0; transform: translateY(-4px); transition: opacity 0.25s, transform 0.25s; text-shadow: 0 0 2px #000, 0 2px 6px rgba(0,0,0,0.7); }
+#hud-delta.show { opacity: 1; transform: none; }
+#hud-delta.up { color: #7fe39a; } #hud-delta.down { color: #ff7a6e; }
+#hud-weapon { margin-top: 6px; font: 600 14px/1 var(--mono); letter-spacing: 0.08em; color: #f4f1ea; text-shadow: 0 0 2px #000, 0 1px 5px rgba(0,0,0,0.8); white-space: pre; }
+body.gta #cluster { width: auto; height: auto; right: 22px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+body.gta #readout { position: static; padding: 0; display: flex; align-items: baseline; gap: 6px; text-shadow: 0 0 2px #000, 0 2px 8px rgba(0,0,0,0.7); }
+body.gta #speed { font-size: 40px; } body.gta #gear { font-size: 18px; margin: 0 0 0 6px; } body.gta #gearmode { display: none; }
+body.gta.on-foot #cluster { display: none; }
+body.gta #career-hud { top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px; transform: none; padding: 6px; gap: 6px; }
+body.gta #career-hud > div { display: none; }
+body.gta #career-hud button { padding: 7px 9px; font-size: 11px; }
+body.gta #story-job { top: 120px; right: 16px; }
+body.gta #active-job { top: 64px; }
+#radio-name { position: fixed; left: 50%; top: 13%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 0.35s; z-index: 3; }
+#radio-name.show { opacity: 1; }
+#radio-name b { display: block; font: 700 26px/1 var(--display); letter-spacing: 0.06em; color: #f4f1ea; text-shadow: 0 0 2px #000, 0 2px 10px rgba(0,0,0,0.8); }
+#radio-name span { display: block; margin-top: 6px; font: 500 12px/1 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); text-shadow: 0 1px 6px #000; }
+#passed { position: fixed; left: 0; right: 0; top: 28%; z-index: 6; pointer-events: none; display: grid; justify-items: center; gap: 8px; padding: 22px 0 20px; opacity: 0; transition: opacity 0.4s;
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.62) 25%, rgba(0,0,0,0.62) 75%, transparent); }
+#passed.show { opacity: 1; }
+#passed b { font: italic 700 60px/1 var(--display); letter-spacing: 0.04em; color: #f2c12e; text-shadow: 0 3px 0 rgba(0,0,0,0.5); }
+#passed.fail b { color: #e8463b; }
+#passed em { font: 600 22px/1 var(--display); font-style: normal; color: #f4f1ea; }
+#passed span { font: 600 15px/1 var(--mono); color: #7fe39a; letter-spacing: 0.04em; }
+#passed.fail span { color: var(--ink); }
+body.down #gl { filter: grayscale(1) contrast(1.15) brightness(0.8); transition: filter 0.8s; }
+#gl { transition: filter 0.4s; }
+#fadefx { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 7; transition: opacity 0.45s; }
+body.fade #fadefx { opacity: 1; }
+@media (max-width: 560px) {
+  body.gta #map { width: 200px; height: 129px; } body.gta #vitals { width: 200px; }
+  #passed b { font-size: 36px; } #hud-cash { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { body.down #gl, #fadefx, #passed, #hud-delta { transition: none; } }
+body.gta.show-keys #brand { top: calc(64px + env(safe-area-inset-top, 0px)); }
+
+/* Mission text: subtitles along the bottom, the title card when a job starts */
+#subtitle { position: fixed; left: 50%; bottom: calc(10% + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: min(760px, 86vw); text-align: center; z-index: 4; pointer-events: none;
+  font: 600 19px/1.4 var(--display); color: #f4f1ea; text-shadow: 0 0 3px #000, 0 2px 8px rgba(0,0,0,0.9); opacity: 0; transition: opacity 0.25s; }
+#subtitle.show { opacity: 1; }
+#subtitle .who { color: #9fd0ff; font-weight: 700; letter-spacing: 0.03em; }
+#subtitle .obj b { color: #f2c12e; font-weight: 700; }
+#title-card { position: fixed; right: 6%; bottom: 26%; z-index: 4; pointer-events: none; text-align: right; opacity: 0; transform: translateX(20px); transition: opacity 0.6s, transform 0.6s; }
+#title-card.show { opacity: 1; transform: none; }
+#title-card b { display: block; font: italic 700 54px/1 var(--display); color: #f4f1ea; text-shadow: 0 3px 0 rgba(0,0,0,0.45), 0 2px 14px rgba(0,0,0,0.7); }
+#title-card span { display: block; margin-top: 8px; font: 600 14px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: #f2c12e; text-shadow: 0 1px 6px #000; }
+body.gta #story-job { display: none; }
+body.gta #active-job { transform: translateX(-50%) scale(0.85); transform-origin: top center; }
+@media (max-width: 560px) { #subtitle { font-size: 15px; } #title-card b { font-size: 34px; } }
+
+#crosshair.target { background: #ff4a3d; outline-color: rgba(255,74,61,0.8); }
+#crosshair.hit { transform: scale(1.8); background: #fff; outline-color: #fff; transition: transform 0.05s; }
+
+#vitals .bar:first-child { flex: 2; }
+#hud-hp { margin-top: 4px; font: 700 22px/1 var(--display); color: #f4f1ea; text-shadow: 0 0 2px #000, 0 2px 8px rgba(0,0,0,0.75); font-variant-numeric: tabular-nums; }
+#hud-hp .heart { font-style: normal; color: #ff5a4e; margin-right: 5px; }
+#hud-hp .shield { font-style: normal; color: #6fb2ff; margin: 0 4px 0 8px; font-size: 18px; }
+#lowhp-fx { inset: 0; z-index: 1; opacity: 0; background: radial-gradient(ellipse at center, rgba(160,0,0,0) 50%, rgba(170,10,10,0.55)); }
+body.lowhp #lowhp-fx { animation: lowhp 1.1s infinite; }
+@keyframes lowhp { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.85; } }
+#car-card { right: 22px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); width: 250px; padding: 12px 14px; border-radius: 10px; background: rgba(14,15,20,0.72); border: 1px solid var(--line);
+  opacity: 0; transform: translateY(8px); transition: opacity 0.35s, transform 0.35s; }
+#car-card.show { opacity: 1; transform: none; }
+#car-card b { display: block; font: 700 22px/1.1 var(--display); color: #f4f1ea; }
+#car-card small { display: block; margin: 4px 0 10px; font: 500 11px/1.3 var(--mono); color: var(--dim); }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; align-items: center; margin: 8px 0 4px; font: 500 10px/1 var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; text-align: left; }
+.stats i { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.stats i b { display: block; height: 100%; background: linear-gradient(90deg, #53e4c1, #f2c12e); }
+body:not(.gta) #hud-hp { display: none; }

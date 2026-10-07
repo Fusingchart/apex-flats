@@ -141,6 +141,8 @@ window.createPost = function (renderer, scene, camera) {
     }`, { tColor: { value: null }, tAO: { value: null }, tBloom: { value: null }, exposure: { value: 1.0 }, bloom: { value: 0.05 }, aoAmt: { value: 0.65 }, time: { value: 0 }, res: { value: new THREE.Vector2() } });
 
   let W = 4, H = 4, enabled = true, aoOn = true;
+  // MSAA sample count for the scene target (the quality presets trade it for speed)
+  function setSamples(n) { if (!isGL2 || sceneRT.samples === n) return; sceneRT.samples = n; sceneRT.dispose(); }
   function setSize(w, h) {
     W = Math.max(4, Math.floor(w)); H = Math.max(4, Math.floor(h));
     sceneRT.setSize(W, H);
@@ -181,6 +183,6 @@ window.createPost = function (renderer, scene, camera) {
     finalMat.uniforms.time.value = (finalMat.uniforms.time.value + 1) % 1000;
     pass(finalMat, null);
   }
-  return { render, setSize, get enabled() { return enabled; }, set enabled(v) { enabled = v; }, set ao(v) { aoOn = v; }, get ao() { return aoOn; }, sceneRT, aoRT, finalMat };
+  return { render, setSize, setSamples, get enabled() { return enabled; }, set enabled(v) { enabled = v; }, set ao(v) { aoOn = v; }, get ao() { return aoOn; }, sceneRT, aoRT, finalMat };
 };
 })();

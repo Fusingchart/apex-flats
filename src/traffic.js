@@ -305,7 +305,8 @@ window.createTraffic = function (ctx) {
   }
 
   /* ---------------- Spawning around the player ---------------- */
-  const SPAWN_MIN = 130, SPAWN_MAX = 460, DESPAWN = 520;
+  // a tighter bubble than before: the same pool of cars, more of them where you can see them
+  const SPAWN_MIN = 90, SPAWN_MAX = 330, DESPAWN = 390;
   const cellsTmp = [], camDir = new THREE.Vector3();
   function inView(x, y, z) {
     camera.getWorldDirection(camDir);
@@ -355,7 +356,7 @@ window.createTraffic = function (ctx) {
       const c = cand[(rand() * cand.length) | 0], v = vehicles.find(u => u.police && u.state === 'idle');
       if (v && (initial || !inView(c.x, c.y, c.z)) && Math.hypot(player.x - c.x, player.z - c.z) > 60) activate(v, c);
     }
-    const target = Math.min(max, Math.round(expected));
+    const target = Math.min(max, Math.round(expected * 2.4)); // busier than the bare road weights: the city should feel alive
     for (let tries = 0; tries < (initial ? 400 : 10) && count < target && cand.length; tries++) {
       const pick = rand() * cum[cum.length - 1];
       let lo = 0, hi = cum.length - 1;
@@ -979,6 +980,19 @@ window.createTraffic = function (ctx) {
     b.x = player.x; b.z = player.z; b.y0 = player.y; b.ux = Math.cos(player.h); b.uz = -Math.sin(player.h);
     b.px = player.px; b.pz = player.pz; b.pux = Math.cos(player.ph); b.puz = -Math.sin(player.ph);
   }
+  // Do two car boxes (oriented rectangles) overlap, allowing a small margin? Separating axes, in 2D. Much tighter
+  // than nearCar's bounding radius, which counts two cars queued at a light as touching.
+  function boxesTouch(v, b, m) {
+    const ax = Math.cos(v.h), az = -Math.sin(v.h), ahx = v.box.hx + m, ahz = v.box.hz + m;
+    const bx = b.ux, bz = b.uz, bhx = (b.hx || b.r || 0.4) + m, bhz = (b.hz || b.r || 0.4) + m;
+    const dx = b.x - v.x, dz = b.z - v.z;
+    for (const [nx, nz] of [[ax, az], [-az, ax], [bx, bz], [-bz, bx]]) {
+      const ra = ahx * Math.abs(ax * nx + az * nz) + ahz * Math.abs(-az * nx + ax * nz);
+      const rb = bhx * Math.abs(bx * nx + bz * nz) + bhz * Math.abs(-bz * nx + bx * nz);
+      if (Math.abs(dx * nx + dz * nz) > ra + rb) return false;
+    }
+    return true;
+  }
   function collideAI(v, dt) {
     // a settled wreck away from you stops simulating its crumple structure (others still collide with its box)
     if (v.state === 'wreck' && now - v.crashT > 2.5 && Math.hypot(v.x - player.x, v.z - player.z) > 25) { v.vx *= 0.9; v.vz *= 0.9; v.w *= 0.9; return; }
@@ -990,7 +1004,7 @@ window.createTraffic = function (ctx) {
       nearSolids(v.x, v.z, 5, solidsTmp);
       for (const o of solidsTmp) if (nearCar(v.x, v.z, v.h, o, 0.4, v.y)) near.push(localObstacle(near.length, o, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
     } else solidsTmp.length = 0;
-    for (const u of vehicles) if (u !== v && u.state !== 'idle' && Math.abs(u.x - v.x) < 6 && Math.abs(u.z - v.z) < 6 && nearCar(v.x, v.z, v.h, u.box, 0.4, v.y)) near.push(localObstacle(near.length, u.box, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
+    for (const u of vehicles) if (u !== v && u.state !== 'idle' && Math.abs(u.x - v.x) < 6 && Math.abs(u.z - v.z) < 6 && Math.abs(u.y - v.y) < 2 && boxesTouch(v, u.box, 0.3 + Math.hypot(u.vx - v.vx, u.vz - v.vz) / 240 * 2)) near.push(localObstacle(near.length, u.box, v.px, v.pz, s0, c0, v.x, v.z, s, c, v.pool, v.y));
     if (Math.abs(player.x - v.x) < 6 && Math.abs(player.z - v.z) < 6 && nearCar(v.x, v.z, v.h, playerBox, player.onFoot ? 0.05 : 0.4, v.y)) {
       // a person on foot isn't a crash obstacle: cars don't crumple on pedestrians; a moving car knocks you down instead
       if (player.onFoot) { const sp = Math.hypot(v.vx, v.vz); if (player.onHitByCar && sp > 2.5 && now - (v.pedHitT || -9) > 1) { v.pedHitT = now; player.onHitByCar(v, sp); } }
@@ -1110,6 +1124,8 @@ window.createTraffic = function (ctx) {
         const cx = camera.position.x, cz = camera.position.z;
         if (inView(v.x, v.y + 1, v.z) && Math.hypot(v.x - cx, v.z - cz) < 260 && sightClear(cx, cz, v.x, v.z, v.y)) return false; // you'd see it vanish
         deactivate(v); v.deployed = false; if (v.driverMesh) v.driverMesh.visible = true; return true; },
+      /** Every police unit off the board at once (you've been taken away; the chase is over) */
+      dismiss() { pol.active = false; for (const v of vehicles) if (v.police && v.state !== 'idle') { deactivate(v); v.deployed = false; v.staged = false; } },
       /** End the chase: units out of sight leave at once, the rest pull over and are recycled once you're gone */
       standDown() {
         pol.active = false;

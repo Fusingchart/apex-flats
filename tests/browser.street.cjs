@@ -16,20 +16,21 @@ const { chromium } = require('playwright'), assert = require('node:assert/strict
   await p.evaluate(() => { const g = apex.street.places.GARAGE; apex.police.clear(); apex.crime.setFootPosition({ x: g.x, z: g.z, y: g.y, h: 0 }); });
   await p.waitForFunction(() => apex.street.active);
   let s = await S(); console.log('started', s);
-  assert.equal(s.job, 'Wheels'); assert.ok(s.brief, 'briefing shown');
-  await p.locator('#story-ok').click();
+  assert.equal(s.job, 'Wheels'); assert.ok(!s.brief, 'no pausing briefing: the job opens with a title card');
+  assert.ok(await p.evaluate(() => document.getElementById('title-card').classList.contains('show')), 'title card shown');
   // steal a car: any parked civilian car
   await p.waitForFunction(() => apex.crime.parked.some(r => r.npc), { timeout: 20000 });
-  await p.evaluate(async () => { for (const u of apex.traffic.police.units()) { u.x += 6000; } const r = apex.crime.parked.find(q => q.npc); r.locked = false; const h = r.pose.h; apex.crime.setFootPosition({ x: r.pose.x + Math.cos(h) * 2.2, z: r.pose.z - Math.sin(h) * 2.2, y: r.pose.y, h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); });
+  await p.evaluate(async () => { for (const u of apex.traffic.police.units()) { u.x += 6000; } const r = apex.crime.parked.find(q => q.npc); for (const q of apex.crime.parked) q.locked = false; for (const v of apex.traffic.vehicles) if (v.state !== 'idle' && Math.hypot(v.x - r.pose.x, v.z - r.pose.z) < 12) v.x += 3000; /* the nearest car must be this unlocked one */ const h = r.pose.h; apex.crime.setFootPosition({ x: r.pose.x + Math.cos(h) * 2.2, z: r.pose.z - Math.sin(h) * 2.2, y: r.pose.y, h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); });
   await p.waitForFunction(() => !apex.crime.onFoot && apex.street.stage === 1, { timeout: 10000 });
   // deliver it
-  await p.evaluate(() => { apex.police.clear(); const g = apex.street.places.GARAGE; apex.resetCar({ x: g.x, z: g.z, y: g.y, h: g.h }); });
-  await p.waitForFunction(() => !apex.street.active, { timeout: 10000 });
+  await p.evaluate(() => { apex.police.clear(); const g = apex.street.places.GARAGE; for (const v of apex.traffic.vehicles) if (v.state !== 'idle' && Math.hypot(v.x - g.x, v.z - g.z) < 60) v.x += 4000; apex.resetCar({ x: g.x, z: g.z, y: g.y, h: g.h }); });
+  await p.waitForFunction(() => !apex.street.active, { timeout: 10000 }).catch(async e => { console.log('stuck', await p.evaluate(() => ({ lvl: apex.police.state.level, stage: apex.street.stage, onFoot: apex.crime.onFoot, ride: apex.street.active && JSON.stringify({ d: Math.hypot(apex.car.x - apex.street.places.GARAGE.x, apex.car.z - apex.street.places.GARAGE.z), sp: Math.hypot(apex.car.vx, apex.car.vz), dmg: apex.soft().damage }), sub: document.getElementById('subtitle').textContent, passed: document.getElementById('passed').textContent }))); throw e; });
   s = await S(); console.log('done', s);
   assert.ok(s.done === 1 && s.onFoot && s.cash >= 4500, 'job pays, car handed over');
   await p.keyboard.press('Escape');
   // Apex Customs: in a stolen, dented car: repair, then sell it
-  await p.evaluate(async () => { const r = apex.crime.parked.find(q => q.npc) ; if (r) { r.locked = false; apex.crime.setFootPosition({ x: r.pose.x + Math.cos(r.pose.h) * 2.2, z: r.pose.z - Math.sin(r.pose.h) * 2.2, y: r.pose.y, h: r.pose.h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); } });
+  await p.waitForFunction(() => apex.crime.parked.some(q => q.npc), { timeout: 20000 });
+  await p.evaluate(async () => { const r = apex.crime.parked.find(q => q.npc) ; if (r) { for (const q of apex.crime.parked) q.locked = false; for (const v of apex.traffic.vehicles) if (v.state !== 'idle' && Math.hypot(v.x - r.pose.x, v.z - r.pose.z) < 12) v.x += 3000; /* the nearest car must be this unlocked one */ apex.crime.setFootPosition({ x: r.pose.x + Math.cos(r.pose.h) * 2.2, z: r.pose.z - Math.sin(r.pose.h) * 2.2, y: r.pose.y, h: r.pose.h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); } });
   await p.waitForFunction(() => !apex.crime.onFoot, { timeout: 15000 });
   await p.evaluate(() => { const s = apex.soft(); for (let i = 0; i < s.p.length; i += 3) if (s.rest[i + 2] > 1.4) s.p[i + 2] -= 0.3; s.version++; s.refresh(); apex.applyDamage(); const sh = apex.street.places.SHOPS[0]; apex.resetCar({ x: sh.x, z: sh.z, y: sh.y, h: sh.h }); });
   await p.waitForTimeout(400);
@@ -46,7 +47,8 @@ const { chromium } = require('playwright'), assert = require('node:assert/strict
   console.log('sold', sold);
   assert.ok(sold.onFoot && sold.cash > after.cash, 'selling pays and takes the car');
   // respray: wanted, out of sight, in a car → clears the stars
-  await p.evaluate(async () => { const r = apex.crime.parked.find(q => q.npc); r.locked = false; apex.crime.setFootPosition({ x: r.pose.x + Math.cos(r.pose.h) * 2.2, z: r.pose.z - Math.sin(r.pose.h) * 2.2, y: r.pose.y, h: r.pose.h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); });
+  await p.waitForFunction(() => apex.crime.parked.some(q => q.npc), { timeout: 20000 });
+  await p.evaluate(async () => { const r = apex.crime.parked.find(q => q.npc); for (const q of apex.crime.parked) q.locked = false; for (const v of apex.traffic.vehicles) if (v.state !== 'idle' && Math.hypot(v.x - r.pose.x, v.z - r.pose.z) < 12) v.x += 3000; /* the nearest car must be this unlocked one */ apex.crime.setFootPosition({ x: r.pose.x + Math.cos(r.pose.h) * 2.2, z: r.pose.z - Math.sin(r.pose.h) * 2.2, y: r.pose.y, h: r.pose.h }); await new Promise(res => setTimeout(res, 200)); await apex.crime.interact(); });
   await p.waitForFunction(() => !apex.crime.onFoot, { timeout: 15000 });
   await p.evaluate(() => { const sh = apex.street.places.SHOPS[0]; apex.resetCar({ x: sh.x, z: sh.z, y: sh.y, h: sh.h }); apex.police.raise(2, 'Test', 100); });
   await p.waitForTimeout(300);
