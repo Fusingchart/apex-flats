@@ -1,6 +1,6 @@
 # Apex Flats
 
-A 3D driving game in the browser, built with Three.js. You drive a city on a snowy winter afternoon (set `WINTER = false` in `src/main.js` for the original summer): a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police enforce them, the cars crumple when they hit things, and you can earn and collect 24 original cars.
+A 3D driving game in the browser, built with Three.js. You drive a city through a summer day and night with changing weather (add `?winter` to the URL for the snowed-in winter afternoon, which has no day cycle or weather): a dense downtown of glass, concrete and brick towers, apartment blocks, suburbs, a freeway with interchanges, and hills beyond. The traffic follows the rules, the police come after what you hit, steal or shoot, the cars crumple when they hit things, and you can earn and collect 24 original cars.
 
 ## Run it
 
@@ -44,7 +44,10 @@ The standalone build uses the 2K sky (`assets/sky/sky_2k.hdr`, made by `tools/do
 | Space (on foot) | Jump |
 | R (on foot) | Reload |
 | Enter | Shop at Apex Customs (blue $ on the map) |
-| Z | Slow motion (¼ speed, free roam only, not while wanted) |
+| Z | Special ability: slow time while the yellow bar under the radar lasts (it refills as you drive, fight and finish jobs) |
+| Q, held (on foot) | Weapon wheel: time slows, move the mouse to pick |
+| P | Phone: replay missions, contacts, stats, switch character |
+| X | Switch between Cole, Vince and Ray |
 | M | Mute |
 | G | Graphics quality (low / medium / high) |
 | H | Switch between the street HUD and the detailed driving HUD (telemetry, damage map, rev counter, controls) |
@@ -155,15 +158,14 @@ Measured in headless runs: no AI-to-AI contact and no stop signs or red lights r
 
 ## Police
 
-Patrol cars (black and white, light bar) drive in the normal traffic. If one can see you (within range, no building in the way), these are offences:
+Patrol cars (black and white, light bar) drive in the normal traffic. Speed alone is not an offence. If a patrol can see you (within range, no building in the way), these are:
 
 | Offence | Wanted | Bounty |
 | --- | --- | --- |
-| Speeding (about 30% over the limit) | ★ | $200 + |
 | Driving on the pavement or grass at speed | ★ | $300 |
 | Wrong-way driving (freeway: ★★) | ★ | $300 / $900 |
-| Hitting another car | ★ | $400 + |
-| Ramming a police car (always counts) | ★★ | $1,500 |
+| Hitting another car hard (a tap in a queue doesn't count) | ★ | $400 + |
+| Hitting a police car (always counts; ★★ if you're already wanted) | ★ | $400 / $1,500 |
 | Carjacking, theft, a car alarm, gunfire, assault, homicide | ★–★★ | $200 + |
 | Shooting at or hurting an officer (always counts) | ★★★ | $1,500 |
 | Stealing a police car / killing an officer (always counts) | ★★★ / ★★★★ | $5,000 |

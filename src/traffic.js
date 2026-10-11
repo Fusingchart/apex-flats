@@ -1056,7 +1056,8 @@ window.createTraffic = function (ctx) {
       v.lights.forEach((L, i) => { const lit = on && i === k && strobe; L.mat.emissiveIntensity = lit ? 6 : 0.15; L.glow.material.opacity = lit ? 0.9 : 0; });
     }
     const tail = v.kit.parts.find(p => p.name === 'Taillight');
-    v.kit.mats.tail.emissiveIntensity = tail && tail.broken ? 0 : (v.brake > 0.08 ? 3.5 : 0.7);
+    v.kit.mats.tail.emissiveIntensity = (tail && tail.broken ? 0 : (v.brake > 0.08 ? 3.5 : 0.7)) * GLOW.k;
+    if (v.kit.heads && v.glowK !== GLOW.k) { v.glowK = GLOW.k; for (const hm of v.kit.heads) if (hm.material && hm.material.emissiveIntensity > 0) hm.material.emissiveIntensity = 3 * GLOW.k; }
     const left = v.hazard || v.signal === 1, right = v.hazard || v.signal === -1;
     v.kit.indicators.left.emissiveIntensity = left && blinkOn ? 3 : 0;
     v.kit.indicators.right.emissiveIntensity = right && blinkOn ? 3 : 0;

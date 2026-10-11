@@ -1,4 +1,4 @@
-// Police: patrol cars watch the traffic around them. Speeding, driving on the pavement, the wrong way or into
+// Police: patrol cars watch the traffic around them. Driving on the pavement, the wrong way or hard into
 // other cars where a patrol can see it gets you a wanted level (1-5 stars) and a bounty. While you're wanted,
 // more units are sent after you; out of sight long enough and you lose them (the bounty stays on your head and
 // any cop who gets a good look at you will remember). Stop with a cruiser alongside and you're busted.
@@ -156,7 +156,7 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
     if (L && L.d < 30) {
       const limit = L.speed, over = sp > limit * 1.3 + 4;
       S.speedT = over ? S.speedT + dt : Math.max(0, S.speedT - dt);
-      if (S.speedT > 1 && S.level < 1) { S.speedT = 0; crime(1, 'Speeding', 200 + Math.round((sp - limit) * 3.6) * 5); }
+      // speed alone is no offence here, as in Los Santos: the police care what you hit, not how fast you went
       const wrong = L.d < 3 && sp > 9 && L.kind !== 'fwy' && Math.cos(Math.atan2(player.vx, player.vz) - L.h) < -0.6;
       const fwyWrong = L.kind === 'fwy' && L.d < 4 && sp > 9 && Math.cos(Math.atan2(player.vx, player.vz) - L.h) < -0.6;
       S.wrongT = wrong || fwyWrong ? S.wrongT + dt : 0;
@@ -171,11 +171,11 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
       // one offence per collision: contact within a second of the last counts as the same one
       if (S.t - (v.lastHitT ?? -99) > 1) { v.hitAcc = 0; v.hitFired = false; }
       v.lastHitT = S.t; v.hitAcc += dv;
-      if (v.hitFired || v.hitAcc < 1.2) continue;
+      if (v.hitFired || v.hitAcc < (v.police ? 1.2 : 3)) continue; // a tap in a queue is not a hit and run
       v.hitFired = true;
       if (v.state === 'pursue' && sp < Math.hypot(v.vx, v.vz) + 3) continue; // they rammed you
       v.struckT = S.t; // you hit them
-      if (v.police) raise(Math.max(2, S.level), 'Assaulting an officer', 1500, true);
+      if (v.police) raise(S.level ? Math.max(2, S.level) : 1, S.level ? 'Assaulting an officer' : 'Hit a police car', S.level ? 1500 : 400, true);
       else crime(Math.max(1, S.level), 'Hit and run', 400 + Math.round(v.hitAcc * 60));
     }
     // a pursuit car you've wrecked
@@ -349,6 +349,6 @@ window.createPolice = function ({ traffic, city, player, audio, scene, onBusted,
     }
   }
   function clear() { S.maxLevel = 0; S.level = 0; S.bounty = 0; S.heat = 0; S.evadeT = 0; S.bustT = 0; S.downed = 0; S.lastSeen = null; S.reports.length = 0; P.standDown(); }
-  return { update, state: S, raise, crime, clear, report, bust, zoneR, grace(t) { S.graceT = t; S.knownT = 0; S.reports.length = 0; }, setEyes(fn) { eyes = fn; }, arrest(dt = 0.05) { S.cuffT = Math.max(S.cuffT || 0, dt + 0.05); } };
+  return { update, state: S, raise, crime, clear, report, bust, zoneR, seeR: () => SEE[S.level], grace(t) { S.graceT = t; S.knownT = 0; S.reports.length = 0; }, setEyes(fn) { eyes = fn; }, arrest(dt = 0.05) { S.cuffT = Math.max(S.cuffT || 0, dt + 0.05); } };
 };
 })();

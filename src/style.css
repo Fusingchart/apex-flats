@@ -64,7 +64,7 @@ body { background: var(--ground); color: var(--ink); font-family: var(--mono); -
 .cards .spec { font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .cards em { font-style: normal; font-size: 11px; color: var(--dim); line-height: 1.35; }
 .cards kbd { position: absolute; top: 10px; right: 10px; font: 600 11px var(--mono); color: var(--dim); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
-#bigmap { position: fixed; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92vw, 92vh); height: min(92vw, 92vh); border-radius: 14px; border: 1px solid var(--line); }
+#bigmap { position: fixed; z-index: 4; inset: 0; width: 100vw; height: 100vh; background: #0d131b; cursor: crosshair; touch-action: none; }
 #touch { position: fixed; inset: auto 0 0 0; z-index: 3; display: none; justify-content: space-between; padding: 0 16px calc(280px + env(safe-area-inset-bottom, 0px)); pointer-events: none; }
 #touch .grp { display: flex; gap: 12px; pointer-events: auto; }
 #touch button { width: 68px; height: 68px; border-radius: 50%; border: 1px solid var(--line); background: var(--glass); color: var(--ink); font: 700 13px var(--display); letter-spacing: 0.08em; touch-action: none; }
@@ -165,6 +165,14 @@ body.gta #vitals { display: flex; gap: 4px; left: 16px; bottom: calc(16px + env(
 #hp-bar { background: linear-gradient(#7fd88c, #4fae5f); }
 #hp-bar.low { background: linear-gradient(#ff6b5e, #c9362b); animation: hp-blink 0.8s infinite; }
 #ar-bar { background: linear-gradient(#78b8ff, #3d86d8); }
+#sp-bar { background: linear-gradient(#ffd95a, #e0a81e); transition: width 0.1s; }
+#sp-bar.on { animation: hp-blink 0.5s infinite; }
+#sp-bar.empty { background: linear-gradient(#8a7a4a, #6a5c30); }
+/* The part of the valley you've just driven into, GTA-style: bottom right, for a few seconds */
+#area-pop { position: fixed; right: 22px; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); font: italic 600 26px/1 var(--display); color: #f4f1ea; text-shadow: 0 0 2px #000, 0 2px 10px rgba(0,0,0,0.75); opacity: 0; transition: opacity 0.8s; pointer-events: none; z-index: 2; text-align: right; }
+#area-pop.show { opacity: 1; }
+#area-pop small { display: block; font: 600 12px/1.6 var(--mono); font-style: normal; letter-spacing: 0.1em; color: rgba(243,236,228,0.75); }
+body:not(.gta) #area-pop { display: none; }
 @keyframes hp-blink { 50% { opacity: 0.45; } }
 body.gta #wanted { top: calc(14px + env(safe-area-inset-top, 0px)); right: 18px; width: auto; text-align: right; }
 body.gta #stars { font-size: 30px; letter-spacing: 3px; }
@@ -196,6 +204,50 @@ body.gta #active-job { top: 64px; }
 #passed em { font: 600 22px/1 var(--display); font-style: normal; color: #f4f1ea; }
 #passed span { font: 600 15px/1 var(--mono); color: #7fe39a; letter-spacing: 0.04em; }
 #passed.fail span { color: var(--ink); }
+/* the medal and its gold objectives, ticked or not */
+#passed ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; justify-items: center; font: 600 14px/1.2 var(--mono); color: var(--ink); text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+#passed ul:empty { display: none; }
+#passed li.medal { font: 700 20px/1 var(--display); letter-spacing: 0.14em; margin-bottom: 2px; }
+#passed li.gold { color: #f2c12e; } #passed li.silver { color: #cfd6dc; } #passed li.bronze { color: #c98a52; }
+#passed li.ok::before { content: '✓  '; color: #7fe39a; } #passed li.no::before { content: '✗  '; color: #e8463b; } #passed li.no { color: rgba(243,236,228,0.6); }
+/* the weapon wheel (hold Q on foot): four slots round a ring, the one the mouse is pushed towards lit */
+#wheel { position: fixed; left: 50%; top: 50%; width: 380px; height: 380px; margin: -190px 0 0 -190px; border-radius: 50%; z-index: 5; pointer-events: none;
+  background: radial-gradient(circle, rgba(10,10,14,0) 0 34%, rgba(10,10,14,0.72) 35% 68%, rgba(10,10,14,0) 69%); }
+#wheel .w { position: absolute; left: 50%; top: 50%; width: 110px; margin: -14px 0 0 -55px; text-align: center; font: 600 15px/28px var(--display); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(243,236,228,0.55); }
+#wheel .w[data-w="0"] { transform: translateY(-140px); } #wheel .w[data-w="1"] { transform: translateX(140px); } #wheel .w[data-w="2"] { transform: translateY(140px); } #wheel .w[data-w="3"] { transform: translateX(-140px); }
+#wheel .w.sel { color: #16151a; background: #f4f1ea; border-radius: 5px; }
+#wheel b { position: absolute; left: 0; right: 0; top: 50%; margin-top: -22px; text-align: center; font: 700 26px/1 var(--display); color: #f4f1ea; letter-spacing: 0.06em; }
+#wheel span { position: absolute; left: 0; right: 0; top: 50%; margin-top: 12px; text-align: center; font: 600 13px/1 var(--mono); color: #ffcf3a; }
+/* mission timers, bottom right, GTA-style */
+#timerbars { position: fixed; right: 22px; bottom: calc(124px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 4px; z-index: 2; pointer-events: none; }
+#timerbars div { display: flex; justify-content: space-between; align-items: baseline; gap: 22px; min-width: 190px; padding: 6px 12px; background: linear-gradient(90deg, rgba(10,10,12,0), rgba(10,10,12,0.78) 30%); }
+#timerbars span { font: 600 12px/1 var(--mono); letter-spacing: 0.12em; color: rgba(243,236,228,0.8); }
+#timerbars b { font: 700 22px/1 var(--display); color: #f4f1ea; font-variant-numeric: tabular-nums; }
+/* the phone (P): bottom right, the game carries on behind it */
+#phone { position: fixed; right: 22px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); width: 286px; height: 480px; z-index: 5; display: grid; grid-template-rows: auto 1fr; border-radius: 30px; padding: 10px; background: #0e0d12; border: 2px solid #3a3742; box-shadow: 0 16px 50px rgba(0,0,0,0.6); }
+#phone header { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 14px 10px; font: 600 11px/1 var(--mono); letter-spacing: 0.1em; color: var(--dim); }
+#phone header b { font: 700 17px/1 var(--display); color: var(--ink); letter-spacing: 0.04em; }
+#phone-body { overflow-y: auto; border-radius: 20px; background: linear-gradient(#1c1a24, #15141b); padding: 12px; display: grid; gap: 8px; align-content: start; }
+#phone-body h4 { margin: 2px 2px 4px; font: 700 18px/1.1 var(--display); color: var(--ink); }
+#phone-body p { margin: 0 2px; font: 500 12px/1.5 var(--mono); color: var(--dim); white-space: pre-line; }
+#phone-body button { text-align: left; padding: 10px 12px; border-radius: 12px; background: #262330; border: 1px solid var(--line); color: var(--ink); font: 600 14px/1.25 var(--display); display: grid; gap: 3px; }
+#phone-body button:hover:not(:disabled) { border-color: #7fe39a; }
+#phone-body button small { font: 500 11px/1.3 var(--mono); color: var(--dim); }
+#phone-body button .gold { color: #f2c12e; } #phone-body button .silver { color: #cfd6dc; } #phone-body button .bronze { color: #c98a52; }
+#phone-body .apps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#phone-body .apps button { text-align: center; padding: 16px 6px; font-size: 13px; }
+#phone-body .apps button i { display: block; font-style: normal; font-size: 24px; margin-bottom: 4px; }
+/* the heist planning board */
+#heist { z-index: 7; background: rgba(12,10,16,0.95); }
+#heist .eyebrow { color: #7fe39a; }
+#heist-body { display: grid; gap: 10px; text-align: left; }
+#heist-body h3 { font: 600 12px/1 var(--mono); letter-spacing: 0.14em; color: var(--dim); margin: 8px 0 0; }
+.heist-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.heist-opt { text-align: left; padding: 12px 14px; border-radius: 8px; background: #221f28; border: 1px solid var(--line); color: var(--ink); display: grid; gap: 5px; align-content: start; }
+.heist-opt b { font: 600 18px/1.1 var(--display); } .heist-opt em { font: 600 11px/1.3 var(--mono); font-style: normal; letter-spacing: 0.06em; color: #ffcf3a; } .heist-opt small { color: var(--dim); line-height: 1.45; font-size: 13px; }
+.heist-opt:hover { border-color: rgba(127,227,154,0.6); }
+.heist-opt.sel { border-color: #7fe39a; background: #1d2a24; box-shadow: 0 0 0 1px #7fe39a inset; }
+#heist-sum { margin-top: 6px; padding: 12px 14px; border-radius: 8px; background: rgba(10,10,12,0.5); font: 500 13px/1.75 var(--mono); color: var(--ink); white-space: pre-line; }
 body.down #gl { filter: grayscale(1) contrast(1.15) brightness(0.8); transition: filter 0.8s; }
 #gl { transition: filter 0.4s; }
 #fadefx { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 7; transition: opacity 0.45s; }

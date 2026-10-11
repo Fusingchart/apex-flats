@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Apex Flats</title>
   <link rel="stylesheet" href="src/fonts.css?v=1">
-  <link rel="stylesheet" href="src/style.css?v=54">
+  <link rel="stylesheet" href="src/style.css?v=55">
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -23,14 +23,17 @@
     <b>V / J</b><span>Garage / contracts</span>
     <b>B</b><span>Business (CEO)</span>
         <b>R / ⇧R</b><span>Back on the road (⇧ also tidies up)</span>
-    <b>Z</b><span>Slow motion</span>
+    <b>Z</b><span>Special ability: slow time (yellow bar)</span>
+    <b>Q (hold)</b><span>Weapon wheel (on foot)</span>
+    <b>P</b><span>Phone: missions, contacts, stats</span>
+    <b>X</b><span>Switch character</span>
     <b>M</b><span>Mute</span>
     <b>G</b><span>Graphics quality (driving)</span>
     <b>F / G</b><span>Enter or carjack / break a window (on foot)</span>
     <b>Mouse / 1–4</b><span>Aim, fire, change weapon (on foot)</span>
     <b>Enter</b><span>Shop at Apex Customs (blue $)</span>
     <b>, / .</b><span>Radio station (in a car)</span>
-    <b>Tab</b><span>Map · click to set a waypoint</span>
+    <b>Tab</b><span>Map · scroll, drag, click for a waypoint</span>
     <b>H</b><span>Switch HUD: street / detailed driving</span>
   </div>
 </div>
@@ -42,18 +45,22 @@
 <div id="banner"></div>
 <div id="hurt"></div>
 <canvas id="map" class="hud" width="360" height="232" aria-label="Radar"></canvas>
-<div id="vitals" class="hud" aria-hidden="true"><div class="bar"><i id="hp-bar"></i></div><div class="bar"><i id="ar-bar"></i></div></div>
+<div id="vitals" class="hud" aria-hidden="true"><div class="bar"><i id="hp-bar"></i></div><div class="bar"><i id="ar-bar"></i></div><div class="bar"><i id="sp-bar"></i></div></div>
+<div id="area-pop" class="hud" aria-live="polite"></div>
 <div id="hud-tr" class="hud"><div id="hud-cash"></div><div id="hud-delta"></div><div id="hud-hp"></div><div id="hud-weapon"></div></div>
 <div id="car-card" class="hud"></div>
 <div id="lowhp-fx" class="hud"></div>
 <div id="radio-name" class="hud" aria-live="polite"></div>
-<div id="passed" aria-live="polite"><b></b><em></em><span></span></div>
+<div id="passed" aria-live="polite"><b></b><em></em><span></span><ul></ul></div>
+<div id="timerbars" class="hud" hidden></div>
+<div id="phone" hidden role="dialog" aria-label="Phone"><header><b id="phone-time">14:00</b><span>ASHBY MOBILE</span></header><div id="phone-body"></div></div>
 <div id="subtitle" aria-live="polite"></div>
 <div id="title-card"><b></b><span></span></div>
 <div id="fadefx"></div>
 <div id="crime-status" class="hud" hidden>HEALTH 100 · PISTOL</div>
 <div id="crime-prompt" class="hud" hidden></div>
 <div id="crosshair" aria-hidden="true"></div>
+<div id="wheel" hidden aria-hidden="true"><i class="w" data-w="0">Fists</i><i class="w" data-w="1">Pistol</i><i class="w" data-w="2">SMG</i><i class="w" data-w="3">Shotgun</i><b></b><span></span></div>
 
 <div id="left" class="hud">
   <div id="damage" class="panel">
@@ -113,6 +120,7 @@
 <div id="biz-prompt" class="panel" hidden></div><div id="shop-prompt" class="panel" hidden></div>
 <div id="story-job" class="panel" hidden><div class="job-meta">MARLOWE'S JOB <strong id="story-dist"></strong></div><h3 id="story-name"></h3><p><span id="story-arrow">↑</span> <span id="story-step"></span></p></div>
 <div id="story-brief" class="overlay" hidden role="dialog" aria-modal="true"><div class="result-content"><div class="eyebrow"></div><h2></h2><p class="brief-text"></p><div class="result-actions"><button id="story-ok" class="action">Got it</button></div></div></div>
+<div id="heist" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="heist-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">LENA'S PLANNING ROOM</div><h2 id="heist-title">The Ashby Score</h2></div><button id="heist-close" class="action">Not yet · Esc</button></div><div id="heist-body"></div></div></div>
 <div id="shop" class="overlay" hidden role="dialog" aria-modal="true"><div class="result-content"><div class="eyebrow">APEX CUSTOMS · <span id="shop-cash"></span></div><h2 id="shop-name"></h2><div id="shop-body"></div><div class="result-actions"><button id="shop-close" class="action">Leave · Esc</button></div></div></div><div id="biz-raid" hidden></div>
 <div id="empire" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="empire-title"><div class="mission-content"><div class="board-head"><div><div class="eyebrow">APEX HOLDINGS / CEO</div><h2 id="empire-title">Build your empire.</h2></div><button id="close-empire" class="action">Back to drive · Esc</button></div><p>Start small with a courier depot, register the company with an office, then grow into salvage, import/export, nightlife, freight and prototype labs. Keep them supplied, sell what they make, pay the upkeep, and protect them from raids.</p><div id="empire-body"></div></div></div>
 <div id="active-job" class="panel" hidden><div class="job-meta">ACTIVE CONTRACT <strong id="job-time"></strong></div><h3 id="job-name"></h3><div id="job-progress"></div><p><span id="job-arrow">↑</span> <span id="job-target"></span></p></div>
@@ -124,21 +132,21 @@
 <script>THREE.ColorManagement.legacyMode = false; // hex colours are sRGB and get converted to linear</script>
 <script src="src/hdr.js?v=29"></script>
 <script src="src/grass.js?v=29"></script>
-<script src="src/post.js?v=52"></script>
+<script src="src/post.js?v=53"></script>
 <script src="vendor/GLTFLoader.js"></script>
 <script src="src/carmodel.js?v=29"></script>
 <script src="src/softbody.js?v=52"></script>
 <script src="src/carmesh.js?v=29"></script>
-<script src="src/city.js?v=67"></script>
-<script src="src/traffic.js?v=59"></script>
-<script src="src/police.js?v=59"></script>
-<script src="src/career.js?v=44"></script>
+<script src="src/city.js?v=68"></script>
+<script src="src/traffic.js?v=60"></script>
+<script src="src/police.js?v=60"></script>
+<script src="src/career.js?v=45"></script>
 <script src="src/missions.js?v=51"></script>
 <script src="src/business.js?v=43"></script>
 <script src="src/empire.js?v=41"></script>
 <script src="src/crime.js?v=62"></script>
-<script src="src/street.js?v=51"></script>
+<script src="src/street.js?v=52"></script>
 <script src="src/radio.js?v=1"></script>
-<script src="src/main.js?v=66"></script>
+<script src="src/main.js?v=67"></script>
 </body>
 </html>

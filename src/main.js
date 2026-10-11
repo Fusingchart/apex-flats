@@ -3,8 +3,9 @@ async function boot() {
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
-// Winter in Ashby Valley: snow on the ground, roofs and trees, an overcast sky, snow falling
-const WINTER = true;
+// Summer in Ashby Valley by default. Add ?winter to the address for the snowed-in valley: snow on the ground, roofs
+// and trees, an overcast sky, snow falling, the river and ponds frozen over
+const WINTER = new URLSearchParams(location.search).has('winter');
 let seed = 1337;
 const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
@@ -52,10 +53,10 @@ const sunDir = SKY.sunDir.clone();
 const SKY_GAIN = SKY.gain; // same normalisation as the environment
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { sky: { value: SKY.skyTex }, gain: { value: SKY_GAIN }, haze: { value: scene.fog.color }, winter: { value: WINTER ? 0.85 : 0 } },
+  uniforms: { sky: { value: SKY.skyTex }, gain: { value: SKY_GAIN }, haze: { value: scene.fog.color }, winter: { value: WINTER ? 0.85 : 0 }, night: { value: 0 }, dusk: { value: 0 }, starK: { value: 5 } },
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
   fragmentShader: `
-    varying vec3 vDir; uniform sampler2D sky; uniform float gain; uniform vec3 haze; uniform float winter;
+    varying vec3 vDir; uniform sampler2D sky; uniform float gain; uniform vec3 haze; uniform float winter; uniform float night; uniform float dusk; uniform float starK;
     vec3 rgbe(vec4 t){ float e = t.a * 255.0; return e < 1.0 ? vec3(0.0) : t.rgb * 255.0 * exp2(e - 136.0); }
     void main(){
       vec3 d = normalize(vDir);
@@ -64,6 +65,13 @@ const skyMat = new THREE.ShaderMaterial({
       // winter: a pale, overcast sky (the photo's blue drained to a cold grey-white, the clouds kept)
       float l = dot(c, vec3(0.3, 0.59, 0.11));
       c = mix(c, vec3(l) * vec3(0.93, 0.97, 1.04) * 1.08 + vec3(0.05, 0.055, 0.065), winter);
+      // dusk and dawn: the low sky goes amber; night: the sky sinks to deep blue and the stars come out
+      c *= mix(vec3(1.0), vec3(1.5, 0.92, 0.6), dusk * smoothstep(0.55, 0.0, d.y));
+      c = mix(c, vec3(dot(c, vec3(0.3, 0.59, 0.11))) * vec3(0.42, 0.6, 1.0) * 0.3, night * 0.9);
+      if (night > 0.02 && d.y > 0.0) {
+        vec3 sq = floor(d * 520.0); float sh = fract(sin(dot(sq, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+        c += vec3(0.92, 0.95, 1.0) * step(0.9988, sh) * (0.4 + 0.6 * fract(sh * 91.7)) * night * starK * smoothstep(0.0, 0.2, d.y);
+      }
       c = mix(c, haze, smoothstep(0.03, -0.04, d.y) + winter * 0.25 * smoothstep(0.35, 0.0, d.y)); // the haze the land fades into
       gl_FragColor = vec4(c, 1.0);
       #include <tonemapping_fragment>
@@ -87,7 +95,8 @@ const hazeAt = h => { // h: camera yaw
   return [0.82, 0.86, 0.9].map((w, k) => (l * 0.35 + 0.65 * w) * 0.75 + c[k] * 0.1);
 };
 
-scene.add(WINTER ? new THREE.HemisphereLight('#dbe5ee', '#e6ecf0', 0.42) : new THREE.HemisphereLight('#c9d4e0', '#6b5a42', 0.12)); // snow bounces light back up
+const hemi = WINTER ? new THREE.HemisphereLight('#dbe5ee', '#e6ecf0', 0.42) : new THREE.HemisphereLight('#c9d4e0', '#6b5a42', 0.12);
+scene.add(hemi); // snow bounces light back up
 const sun = new THREE.DirectionalLight(WINTER ? new THREE.Color('#e9eef6') : new THREE.Color().setRGB(...SKY.sunColor.map(v => 0.6 + 0.4 * Math.sqrt(v))).lerp(new THREE.Color(1, 0.93, 0.82), 0.4), WINTER ? 1.55 : 2.6); // winter: a weak, cold sun through cloud
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
@@ -135,7 +144,7 @@ function nearSolids(x, z, r, out) {
   for (let i = Math.floor((x - r) / GRID); i <= Math.floor((x + r) / GRID); i++)
     for (let j = Math.floor((z - r) / GRID); j <= Math.floor((z + r) / GRID); j++) {
       const list = solidGrid.get(cellKey(i, j));
-      if (list) for (const o of list) if (o._q !== queryId) { o._q = queryId; out.push(o); }
+      if (list) for (const o of list) if (o._q !== queryId && !o.off) { o._q = queryId; out.push(o); }
     }
   return out;
 }
@@ -340,7 +349,7 @@ function stepCar(dt, inp) {
   const ice = car.surface === 'ice';
   car.onSand = car.surface !== 'asphalt' && !ice;
   const wet = car.surface === 'water';
-  const mu = car.surface === 'asphalt' ? P.grip : ice ? 0.3 * P.grip : (wet ? 0.35 : 0.72) * P.grip / 1.08; // frozen river and ponds: slick
+  const mu = car.surface === 'asphalt' ? P.grip * (1 - 0.2 * weather.wet) : ice ? 0.3 * P.grip : (wet ? 0.35 : 0.72) * P.grip / 1.08; // frozen river and ponds: slick
   const gnd = car.air ? 0 : 1; // no tyre forces in the air
 
   // Gear selection
@@ -562,6 +571,7 @@ function coreHit(off, cr, o, s, c) {
 }
 
 const near = [], nearTmp = [];
+let felledCount = 0, snapLoss = 1; // street furniture knocked over this session; the speed the last one cost
 // Is this obstacle actually within reach of the car's body this step (box or post against the car's rectangle,
 // plus how far the two can close in a step)? Lamp posts and kerbside furniture a metre away are not, and keeping
 // them out lets the crash structure sleep instead of solving 240 times a second.
@@ -585,11 +595,19 @@ function inReach(o, s, c, dt) {
 function collide(dt) {
   const s = Math.sin(car.h), c = Math.cos(car.h);
   const s0 = Math.sin(car.ph), c0 = Math.cos(car.ph);
+  if (snapLoss < 1) { car.vx *= snapLoss; car.vz *= snapLoss; snapLoss = 1; } // taken here so the crash sensor doesn't read it as a wall
   const vx0 = car.vx, vz0 = car.vz;
 
   // Soft shell against everything within reach: walls, trees, houses, and other cars
   near.length = 0;
   nearSolids(car.x, car.z, 6, nearTmp);
+  // lamp posts, signals and stop signs break away above a crawl: it costs some speed, it doesn't stop the car
+  if (Math.hypot(car.vx, car.vz) > 4) for (let i = nearTmp.length - 1; i >= 0; i--) {
+    const o = nearTmp[i];
+    if (!o.snap || !traffic.nearCar(car.x, car.z, car.h, o, 0.5, car.y) || !inReach(o, s, c, 0) || !city.knock(o, car.vx, car.vz)) continue;
+    nearTmp.splice(i, 1);
+    snapLoss = Math.min(snapLoss, o.r > 0.1 ? 0.88 : 0.96); crash.shake = Math.max(crash.shake, 0.3); felledCount++;
+  }
   traffic.boxesNear(car.x, car.z, 7, nearTmp, car.y);
   for (const o of nearTmp) if (traffic.nearCar(car.x, car.z, car.h, o, 0.5, car.y) && inReach(o, s, c, dt)) near.push(localObstacle(near.length, o, car.px, car.pz, s0, c0, car.x, car.z, s, c, obsPool, car.y));
   const res = soft.step(dt, near);
@@ -1133,21 +1151,24 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyJ') { empire?.toggle(false); missions?.toggle(); }
   if (e.code === 'KeyB' && started) empire?.toggle();
   if (e.code === 'Tab') { e.preventDefault(); bigMap.open = !bigMap.open; el('bigmap').hidden = !bigMap.open; if (bigMap.open && document.pointerLockElement) document.exitPointerLock?.(); }
-  if (e.code === 'KeyZ' && !missions?.engine.active && !street?.active && !police.state.level) timeScale = timeScale === 1 ? 0.25 : 1;
+  if (e.code === 'KeyZ') toggleAbility();
+  if (e.code === 'KeyP') togglePhone();
+  if (e.code === 'KeyX') switchChar((who.cur + 1) % CHARS.length);
   // Enter opens the shop, but never steals Enter from a focused button or another open menu
   if (e.code === 'Enter' && started && street?.shopAt && !e.target.closest?.('button, a, select, input') && (street.shopOpen || !menuOpen)) { e.preventDefault(); street.openShop(); }
   if (e.code === 'KeyM') audio.muted = !audio.muted;
   if (e.code === 'KeyH') setHudMode(!document.body.classList.contains('gta'));
   if ((e.code === 'Period' || e.code === 'Comma') && started && !crime?.onFoot) { const st = e.code === 'Period' ? radio.next() : radio.prev(); radioUserOff = !st; showRadio(); }
   if (e.code === 'KeyE') shift(1);
-  if (e.code === 'KeyQ') shift(-1);
+  if (e.code === 'KeyQ') { if (crime?.onFoot) openWheel(true); else shift(-1); }
   if (e.code === 'KeyT') car.auto = true;
   if (!started && !/^Digit/.test(e.code)) start();
 });
-addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'KeyQ') openWheel(false); });
+addEventListener('blur', () => openWheel(false));
 addEventListener('mousedown', e => {
-  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen || bigMap.open || downing;
-  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay, #bigmap')) {
+  const menuOpen = !el('garage').hidden || missions?.paused || empire?.open || street?.shopOpen || street?.briefOpen || bigMap.open || downing || wheel.open || phone.open;
+  if (crime && crime.onFoot && !menuOpen && !e.target.closest?.('button, a, select, input, .overlay, #bigmap, #phone')) {
     crime.mouseButton(e.button, true);
     if (document.pointerLockElement !== canvas) { try { const r = canvas.requestPointerLock?.(); if (r?.catch) r.catch(() => {}); } catch (err) { /* lock unavailable: look still follows the mouse */ } }
     e.preventDefault();
@@ -1158,6 +1179,7 @@ addEventListener('mouseup', e => {
 });
 addEventListener('mousemove', e => {
   if (!crime || !crime.onFoot) return;
+  if (wheel.open) return wheelMove(e.movementX || 0, e.movementY || 0); // the mouse picks a weapon, the view holds still
   // locked: full mouse look; unlocked (lock refused or not yet granted): the camera still follows the mouse
   const k = document.pointerLockElement === canvas ? 1 : 0.6;
   crime.mouseMove((e.movementX || 0) * k, (e.movementY || 0) * k);
@@ -1225,6 +1247,48 @@ function makeCarMesh(pr, load = true) {
 }
 
 let timeScale = 1;
+// The weapon wheel (hold Q on foot), as in GTA V: time all but stops, push the mouse towards a slot, let go to draw it
+const wheel = { open: false, x: 0, y: 0, sel: 0 };
+function drawWheel() {
+  const box = el('wheel'), a = crime.ammo?.[wheel.sel];
+  for (const d of box.querySelectorAll('.w')) d.classList.toggle('sel', +d.dataset.w === wheel.sel);
+  box.querySelector('b').textContent = ['FISTS', 'PISTOL', 'SMG', 'SHOTGUN'][wheel.sel];
+  box.querySelector('span').textContent = wheel.sel && a ? `${a.mag} / ${a.res}` : '';
+}
+function openWheel(on) {
+  if (on === wheel.open || (on && (!started || !crime?.onFoot || downing))) return;
+  wheel.open = on; el('wheel').hidden = !on;
+  if (on) { wheel.x = wheel.y = 0; wheel.sel = crime.weapon; drawWheel(); } else if (crime?.onFoot) crime.setWeapon(wheel.sel);
+}
+function wheelMove(dx, dy) {
+  wheel.x += dx; wheel.y += dy;
+  const l = Math.hypot(wheel.x, wheel.y); if (l > 120) { wheel.x *= 120 / l; wheel.y *= 120 / l; }
+  if (l > 28) { const s = ((Math.round(Math.atan2(wheel.x, -wheel.y) / (Math.PI / 2)) % 4) + 4) % 4; if (s !== wheel.sel) { wheel.sel = s; drawWheel(); } } // up, right, down, left
+}
+// The special ability (Z), as in GTA V: time slows while the yellow bar under the radar drains (the
+// wheel and the trigger stay as quick as ever, which is the point), on the road or on foot, in a chase or a job.
+// The bar refills slowly by itself, faster for driving hard: speed, slides, air.
+const ability = { v: 1, on: false, fx: 0 };
+function toggleAbility() {
+  if (!started || downing) return;
+  if (ability.on) ability.on = false; else if (ability.v > 0.12) ability.on = true;
+}
+function updateAbility(real, paused) {
+  if (paused || downing) { if (downing) ability.on = false; return; }
+  if (ability.on) { ability.v -= real / 14; if (ability.v <= 0) { ability.v = 0; ability.on = false; } }
+  else {
+    const sp = Math.hypot(car.vx || 0, car.vz || 0);
+    let gain = 1 / 150;
+    if (!crime?.onFoot) gain += clamp((sp - 22) / 30, 0, 1) / 45 + (Math.abs(car.slipDeg || 0) > 14 && sp > 10 ? 1 / 30 : 0) + (car.air ? 1 / 20 : 0);
+    ability.v = Math.min(1, ability.v + gain * real);
+  }
+  const kind = CHARS[who.cur].ability, foot = !!crime?.onFoot, slow = kind === 'drive' ? (foot ? 0.65 : 0.35) : kind === 'aim' ? (foot ? 0.25 : 0.65) : 1;
+  if (ability.on && kind === 'rage') crime.addArmor(real * 28); // the bruiser: the armour comes back as fast as it goes
+  const want = wheel.open ? 0.12 : ability.on ? slow : 1;
+  if (wheel.open && !crime?.onFoot) openWheel(false);
+  timeScale = Math.abs(timeScale - want) < 0.01 ? want : lerp(timeScale, want, 1 - Math.exp(-real * 9));
+  ability.fx = lerp(ability.fx, ability.on ? 1 : 0, 1 - Math.exp(-real * 6));
+}
 // Back on the road: repair and drop onto the nearest lane (Shift: also tidy up knocked-over props)
 function respawn(tidy) {
   missions?.engine.cancel('Recovery ended the contract');
@@ -1361,70 +1425,119 @@ const ROAD_STYLE = {
 };
 const MAP_ORDER = ['river', 'res', 'ind', 'rural', 'dt', 'art', 'hwy', 'ramp', 'fwy'];
 /* ---------------- The world map ---------------- */
-// One detailed top-down picture of the whole valley, painted once (in slices, so boot isn't held up): shaded
-// relief, woods, water, every building footprint and every road at its real width. The radar and the full map
-// both draw from it.
+// One detailed top-down picture of the whole valley, painted once (in slices, so boot isn't held up) in the
+// colours of a road atlas rather than of the season: blue water with sandy banks, green meadows, darker woods,
+// the patchwork of the farms, rock and snow on the high ground with contour lines, grey town blocks with green
+// parks, every building footprint (shaded by height, casting a shadow) and every road at its real width:
+// orange freeway, yellow highways, white streets. The radar and the full map both draw from it.
 const WORLD = { S: 3072, ext: city.EXT + 60, canvas: null, ready: false };
 WORLD.sc = WORLD.S / (2 * WORLD.ext);
+const ATLAS = {
+  fields: [[186, 172, 100], [140, 170, 88], [164, 140, 96], [158, 186, 100], [198, 186, 118], [124, 156, 82], [150, 176, 92]],
+  town: { dt: [150, 148, 146], mid: [160, 157, 150], ind: [156, 146, 130], sub: [174, 171, 154], vil: [176, 170, 150] },
+  lawn: { dt: [160, 162, 142], mid: [160, 167, 138], ind: [162, 157, 134], sub: [158, 176, 128], vil: [156, 176, 124] }, park: [92, 160, 90],
+  road: { fwy: '#f59e36', ramp: '#f7b458', hwy: '#f8d568', art: '#fff2c4', dt: '#ffffff', rural: '#f1ecdf', res: '#f8f6f0', ind: '#efece5' },
+  casing: { fwy: '#7c4410', ramp: '#8a5518', hwy: '#86661c', art: '#6b6658', dt: '#5c5a56', rural: '#6a665c', res: '#6c6a66', ind: '#66625a' },
+};
 async function buildWorldMap() {
   WORLD.building = true;
-  const { S, ext, sc } = WORLD, R = 1024, px = 2 * ext / R;
+  const t0 = performance.now();
+  const { S, ext, sc } = WORLD, R = 2048, px = 2 * ext / R, EDGE = city.EXT - 2, WL = city.WATER;
   const relief = document.createElement('canvas'); relief.width = relief.height = R;
   const rg = relief.getContext('2d'), img = rg.createImageData(R, R), D = img.data;
   const hRow = new Float32Array(R + 1), hNext = new Float32Array(R + 1);
   const rowH = (j, out) => { for (let i = 0; i <= R; i++) out[i] = city.groundAt(ext - i * px, ext - j * px); };
+  const step = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   rowH(0, hRow);
+  let slice = performance.now();
   for (let j = 0; j < R; j++) {
     rowH(j + 1, hNext);
     for (let i = 0; i < R; i++) {
       const x = ext - i * px, z = ext - j * px, h = hRow[i];
       const k = (j * R + i) * 4;
-      if (h < city.WATER - 0.3) { const deep = clamp((city.WATER - h) / 4, 0, 1); if (WINTER) { D[k] = 168 - 14 * deep; D[k + 1] = 196 - 12 * deep; D[k + 2] = 214 - 8 * deep; } else { D[k] = 46 - 10 * deep; D[k + 1] = 92 - 14 * deep; D[k + 2] = 132 - 10 * deep; } D[k + 3] = 255; continue; } // water (or, in winter, ice)
+      D[k + 3] = 255;
+      if (h < WL - 0.3) { const deep = clamp((WL - h) / 3.2, 0, 1); D[k] = 86 - 44 * deep; D[k + 1] = 150 - 52 * deep; D[k + 2] = 190 - 48 * deep; continue; } // water, darker in the channel
       // lit from the north-west, so hills read at a glance
-      const shade = clamp(0.78 + ((hRow[i + 1] - h) + (hNext[i] - h)) * 0.55 / px, 0.45, 1.25), lift = clamp(h / 300, 0, 1);
-      const wild = city.grassAt(x, z), forest = wild > 0 ? city.forestAt(x, z) : 0, built = wild === 0;
-      let r = 58 + 30 * lift, gch = 70 + 22 * lift, b = 56 + 22 * lift;               // open ground: olive, paling with height
-      if (WINTER) { r = 176 + 30 * lift; gch = 184 + 28 * lift; b = 192 + 26 * lift; } // under snow
-      if (forest > 0.15) { const f = clamp(forest, 0, 1); if (WINTER) { r -= 70 * f; gch -= 58 * f; b -= 60 * f; } else { r -= 22 * f; gch -= 6 * f; b -= 18 * f; } } // woods: deeper green
-      if (built) { r = 72; gch = 74; b = 76; }                                         // pavement, yards, lots
-      if (h > 250) { const s = clamp((h - 250) / 60, 0, 1); r += (200 - r) * s; gch += (204 - gch) * s; b += (210 - b) * s; } // snow
-      D[k] = r * shade; D[k + 1] = gch * shade; D[k + 2] = b * shade; D[k + 3] = 255;
+      const de = hRow[i + 1] - h, ds = hNext[i] - h, slope = Math.hypot(de, ds) / px;
+      const shade = clamp(0.94 + (de + ds) * 0.5 / px, 0.58, 1.2);
+      const wild = Math.abs(x) < EDGE && Math.abs(z) < EDGE ? city.grassAt(x, z) : 1, zone = h < 140 ? city.zoneAt(x, z) : null;
+      let r, gch, b;
+      if (wild === 0 && !zone) { r = 168; gch = 162; b = 144; }                       // a country road's verge, a farmyard
+      else {
+        const lift = clamp((h - 10) / 150, 0, 1);
+        r = 118 + 46 * lift; gch = 152 + 2 * lift; b = 86 + 26 * lift;                // meadow, drying out with height
+        const forest = wild > 0 ? city.forestAt(x, z) : 0;
+        const field = wild > 0 && forest < 0.3 ? city.fieldAt(x, z, h) : -1;
+        if (field >= 0) { const f = ATLAS.fields[field]; r += (f[0] - r) * 0.8; gch += (f[1] - gch) * 0.8; b += (f[2] - b) * 0.8; }
+        if (forest > 0.1) { // woods, a little stippled
+          let t = Math.imul(i * 374761393 + j * 668265263 | 0, 1274126177); t = ((t ^ (t >>> 13)) & 7) - 3;
+          const f = step(0.1, 0.55, forest) * 0.92; r += (54 + t * 2 - r) * f; gch += (102 + t * 3 - gch) * f; b += (62 + t * 2 - b) * f;
+        }
+        const rock = Math.max(step(0.34, 0.8, slope), step(185, 235, h));
+        if (rock > 0) { r += (140 - r) * rock; gch += (130 - gch) * rock; b += (118 - b) * rock; }
+        if (h > 250) { const s = step(250, 295, h); r += (244 - r) * s; gch += (247 - gch) * s; b += (250 - b) * s; } // snow on the tops
+        // contour lines every 20 m, heavier every 100
+        const c = Math.floor(h / 20), ce = Math.floor(hRow[i + 1] / 20), cs = Math.floor(hNext[i] / 20);
+        if (c !== ce || c !== cs) { const major = Math.floor(c / 5) !== Math.floor(ce / 5) || Math.floor(c / 5) !== Math.floor(cs / 5), m = major ? 0.74 : 0.88; r *= m; gch *= m; b *= m; }
+      }
+      if (zone) { // in town: paved ground, gardens and greens, and the parks; the colour eases out into the country at the edge
+        const t = wild === 0 ? ATLAS.town[zone] : city.parkAt(x, z) ? ATLAS.park : ATLAS.lawn[zone], w = 1 - step(0.8, 1, city.zoneR);
+        if (t) { r += (t[0] - r) * w; gch += (t[1] - gch) * w; b += (t[2] - b) * w; }
+      }
+      if (h < WL + 1.7) { const s = step(WL + 1.7, WL + 0.1, h) * (zone ? 0.5 : 0.85); r += (212 - r) * s; gch += (198 - gch) * s; b += (154 - b) * s; } // sand at the water's edge
+      D[k] = r * shade; D[k + 1] = gch * shade; D[k + 2] = b * shade;
     }
     hRow.set(hNext);
-    if (j % 12 === 11) await new Promise(r => setTimeout(r, 0));
+    if (performance.now() - slice > 9) { await new Promise(r => setTimeout(r, 0)); slice = performance.now(); }
   }
   rg.putImageData(img, 0, 0);
   const cv = document.createElement('canvas'); cv.width = cv.height = S;
   const o = cv.getContext('2d'), X = x => S / 2 - x * sc, Y = z => S / 2 - z * sc;
-  o.imageSmoothingEnabled = true; o.drawImage(relief, 0, 0, S, S);
-  // frozen ponds and the wind farm
+  o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high'; o.drawImage(relief, 0, 0, S, S);
+  // ponds: a map shows the water, frozen or not
   for (const pd of city.country.ponds) {
     o.beginPath(); pd.rad.forEach((r, k) => { const a = k / pd.n * TAU, x = X(pd.x + Math.cos(a) * r), y = Y(pd.z + Math.sin(a) * r); k ? o.lineTo(x, y) : o.moveTo(x, y); }); o.closePath();
-    o.fillStyle = WINTER ? '#b8ccd8' : '#2e5c84'; o.fill(); o.strokeStyle = 'rgba(40,60,80,0.4)'; o.lineWidth = 1; o.stroke();
+    o.strokeStyle = 'rgba(212,198,154,0.9)'; o.lineWidth = 3; o.stroke(); o.fillStyle = '#4f8fb8'; o.fill(); o.strokeStyle = 'rgba(30,60,90,0.45)'; o.lineWidth = 0.8; o.stroke();
   }
-  for (const t of city.country.turbines) { o.fillStyle = '#f4f6f8'; o.strokeStyle = '#30343a'; o.lineWidth = 1; o.beginPath(); o.arc(X(t.x), Y(t.z), 3, 0, TAU); o.fill(); o.stroke(); }
-  // buildings
-  o.fillStyle = '#9a9ea6'; o.strokeStyle = 'rgba(30,32,36,0.55)'; o.lineWidth = 0.8;
+  // buildings: shadows first (thrown south-east, longer for taller ones), then the footprints
+  const boxes = solids.filter(s => s.type === 'box' && s.h >= 3 && s.hx <= 90 && s.hz <= 90 && !s.parkedCar);
   let n = 0;
-  for (const s of solids) {
-    if (s.type !== 'box' || s.h < 3 || s.hx > 90 || s.hz > 90 || s.parkedCar) continue;
+  o.fillStyle = 'rgba(24,24,34,0.3)';
+  for (const s of boxes) {
+    const d = clamp(s.h * 0.055, 0.5, 4.5);
+    o.setTransform(1, 0, 0, 1, X(s.x) + d, Y(s.z) + d); o.rotate(-Math.atan2(-s.uz, s.ux));
+    o.fillRect(-s.hx * sc, -s.hz * sc, 2 * s.hx * sc, 2 * s.hz * sc);
+    if (++n % 1500 === 0) { o.setTransform(1, 0, 0, 1, 0, 0); await new Promise(r => setTimeout(r, 0)); o.fillStyle = 'rgba(24,24,34,0.3)'; }
+  }
+  o.lineWidth = 0.7;
+  for (const s of boxes) {
+    const tall = s.h >= 45, w = 2 * s.hx * sc, d = 2 * s.hz * sc;
     o.setTransform(1, 0, 0, 1, X(s.x), Y(s.z)); o.rotate(-Math.atan2(-s.uz, s.ux));
-    o.fillRect(-s.hx * sc, -s.hz * sc, 2 * s.hx * sc, 2 * s.hz * sc); o.strokeRect(-s.hx * sc, -s.hz * sc, 2 * s.hx * sc, 2 * s.hz * sc);
-    if (++n % 1500 === 0) await new Promise(r => setTimeout(r, 0));
+    o.fillStyle = s.h < 7 ? '#eadfc8' : s.h < 20 ? '#d6cfc2' : tall ? '#8c93a4' : '#b6b6bc';
+    o.strokeStyle = tall ? 'rgba(24,28,40,0.8)' : 'rgba(58,50,40,0.6)';
+    o.fillRect(-w / 2, -d / 2, w, d); o.strokeRect(-w / 2, -d / 2, w, d);
+    if (s.h >= 20 && w > 5 && d > 5) { o.fillStyle = tall ? 'rgba(214,222,238,0.34)' : 'rgba(255,255,255,0.22)'; o.fillRect(-w / 2 + 1.4, -d / 2 + 1.4, w - 2.8, d - 2.8); } // a roof line on the bigger blocks
+    if (++n % 1500 === 0) { o.setTransform(1, 0, 0, 1, 0, 0); await new Promise(r => setTimeout(r, 0)); o.lineWidth = 0.7; }
   }
   o.setTransform(1, 0, 0, 1, 0, 0);
   // roads: a dark casing, then the surface, at their real widths
-  const COL = { fwy: '#f0b84d', ramp: '#e8b456', hwy: '#e9dcae', art: '#e3d9b8', dt: '#d7d9dd', rural: '#cfd1d4', res: '#c4c7cc', ind: '#bfc1c4' };
   o.lineCap = 'round'; o.lineJoin = 'round';
+  const trace = kind => { o.beginPath(); for (const m of city.mapLines) { if (m.kind !== kind) continue; m.pts.forEach((q, i) => i ? o.lineTo(X(q.x), Y(q.z)) : o.moveTo(X(q.x), Y(q.z))); } };
   for (const pass of [0, 1]) for (const kind of MAP_ORDER) {
     if (kind === 'river') continue;
     const w = ROAD_STYLE[kind][1] * sc;
-    o.strokeStyle = pass ? COL[kind] : 'rgba(20,22,26,0.7)'; o.lineWidth = Math.max(pass ? 1.6 : 2.8, w + (pass ? 0 : 1.6));
-    o.beginPath();
-    for (const m of city.mapLines) { if (m.kind !== kind) continue; m.pts.forEach((q, i) => i ? o.lineTo(X(q.x), Y(q.z)) : o.moveTo(X(q.x), Y(q.z))); }
-    o.stroke();
+    o.strokeStyle = pass ? ATLAS.road[kind] : ATLAS.casing[kind]; o.lineWidth = Math.max(pass ? 1.7 : 3, w + (pass ? 0 : 1.7));
+    trace(kind); o.stroke();
   }
-  WORLD.canvas = cv; WORLD.ready = true; WORLD.building = false; bigMap.base = null; // the full map repaints from it
+  o.strokeStyle = 'rgba(124,68,16,0.75)'; o.lineWidth = 1.1; trace('fwy'); o.stroke(); // the central reservation
+  // the wind farm
+  for (const t of city.country.turbines) {
+    const x = X(t.x), y = Y(t.z);
+    o.strokeStyle = '#2a2e36'; o.lineWidth = 3.2; o.beginPath(); for (let k = 0; k < 3; k++) { const a = k / 3 * TAU - 0.5; o.moveTo(x, y); o.lineTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); } o.stroke();
+    o.strokeStyle = '#f6f8fa'; o.lineWidth = 1.6; o.stroke();
+    o.fillStyle = '#f6f8fa'; o.beginPath(); o.arc(x, y, 2.4, 0, TAU); o.fill();
+  }
+  WORLD.canvas = cv; WORLD.ready = true; WORLD.building = false; WORLD.ms = Math.round(performance.now() - t0);
 }
 for (const m of city.mapLines) { // bounding boxes, so the minimap only draws what's near
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -1433,9 +1546,10 @@ for (const m of city.mapLines) { // bounding boxes, so the minimap only draws wh
 }
 // GTA-style radar: a rounded rectangle, heading-up, you a little below centre so you see more of what's ahead; it
 // zooms out with speed. Roads, the GPS routes (purple to your waypoint, yellow to the job), blips, police and the
-// search circle.
+// search circle, and the name of the part of the valley you're in along the bottom.
 const MAP_W = 360, MAP_H = 232;
 let mapRange = 230;
+const mapArea = { name: '', t: 0 };
 function drawMap() {
   const g = mapCtx, W2 = MAP_W, H2 = MAP_H, cx = W2 / 2, cy = H2 * 0.62;
   mapRange = lerp(mapRange, 210 + clamp(Math.hypot(car.vx, car.vz) * 5, 0, 260), 0.04);
@@ -1446,7 +1560,7 @@ function drawMap() {
   const reach = mapRange * 2;
   g.clearRect(0, 0, W2, H2);
   g.save(); g.beginPath(); g.roundRect(1, 1, W2 - 2, H2 - 2, 14); g.clip();
-  g.fillStyle = 'rgba(30,36,34,0.86)'; g.fillRect(0, 0, W2, H2);
+  g.fillStyle = '#1b222b'; g.fillRect(0, 0, W2, H2);
   g.lineCap = 'round'; g.lineJoin = 'round';
   if (WORLD.ready) {
     // the painted world map, turned and scaled under the radar (map pixel u,v -> world x = (S/2-u)/sc, z = (S/2-v)/sc)
@@ -1454,7 +1568,7 @@ function drawMap() {
     g.setTransform(ch * k, sh * k, -sh * k, ch * k, cx - (dx0 * ch - dz0 * sh) * scale, cy - (dx0 * sh + dz0 * ch) * scale);
     g.drawImage(WORLD.canvas, 0, 0);
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = 'rgba(14,16,20,0.18)'; g.fillRect(0, 0, W2, H2); // a touch darker, so blips pop
+    g.fillStyle = 'rgba(12,16,24,0.3)'; g.fillRect(0, 0, W2, H2); // dimmed, so blips pop
   } else for (const kind of MAP_ORDER) {
     const [col, w] = ROAD_STYLE[kind];
     g.strokeStyle = col; g.lineWidth = Math.max(2, w * scale + 1.5);
@@ -1482,20 +1596,47 @@ function drawMap() {
     const x = X(v.x, v.z), y = Y(v.x, v.z);
     if (x < -10 || y < -10 || x > W2 + 10 || y > H2 + 10) continue;
     g.save(); g.translate(x, y); g.rotate(car.h - v.h);
+    if (v.police && v.state !== 'wreck') { // how far this unit can make you out (walls still hide you): stay outside it
+      g.fillStyle = v.state === 'pursue' ? 'rgba(255,90,80,0.05)' : 'rgba(90,140,255,0.06)'; g.strokeStyle = v.state === 'pursue' ? 'rgba(255,110,100,0.4)' : 'rgba(120,160,255,0.4)'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(0, 0, police.seeR() * scale, 0, TAU); g.fill(); g.stroke();
+    }
     g.fillStyle = v.police ? (v.state === 'pursue' ? ((performance.now() / 250 | 0) % 2 ? '#ff3b3b' : '#3b6bff') : '#5b7cff') : v.state === 'wreck' ? '#ff5a4e' : 'rgba(243,236,228,0.92)';
+    g.strokeStyle = 'rgba(16,18,24,0.7)'; g.lineWidth = 1.2; g.strokeRect(-2.5, -5, 5, 10);
     g.fillRect(-2.5, -5, 5, 10); g.restore();
   }
   gps.drawPin(g, X, Y, W2, H2);
-  // you: a white arrowhead with a dark edge
-  g.fillStyle = '#f4f1ea'; g.strokeStyle = '#16151a'; g.lineWidth = 2;
-  g.beginPath(); g.moveTo(cx, cy - 10); g.lineTo(cx + 7, cy + 8); g.lineTo(cx, cy + 4); g.lineTo(cx - 7, cy + 8); g.closePath(); g.stroke(); g.fill();
+  // the edges fall away into shadow, and the name of where you are sits along the bottom
+  const vg = g.createRadialGradient(cx, H2 / 2, H2 * 0.42, cx, H2 / 2, W2 * 0.66);
+  vg.addColorStop(0, 'rgba(8,10,16,0)'); vg.addColorStop(1, 'rgba(8,10,16,0.5)');
+  g.fillStyle = vg; g.fillRect(0, 0, W2, H2);
+  if (performance.now() > mapArea.t) {
+    mapArea.t = performance.now() + 500;
+    const name = city.zoneAt(car.x, car.z, true) || 'Ashby Valley';
+    if (name.toUpperCase() !== mapArea.name && mapArea.name && started && hudEl.area) { // just crossed into somewhere new: say so, bottom right
+      hudEl.area.innerHTML = `${name}<small>${name === 'Ashby Valley' ? 'OPEN COUNTRY' : 'ASHBY VALLEY'}</small>`; hudEl.area.classList.add('show');
+      clearTimeout(mapArea.pop); mapArea.pop = setTimeout(() => hudEl.area.classList.remove('show'), 4200);
+    }
+    mapArea.name = name.toUpperCase();
+  }
+  const band = g.createLinearGradient(0, H2 - 34, 0, H2);
+  band.addColorStop(0, 'rgba(8,10,16,0)'); band.addColorStop(1, 'rgba(8,10,16,0.78)');
+  g.fillStyle = band; g.fillRect(0, H2 - 34, W2, 34);
+  g.fillStyle = 'rgba(244,241,234,0.92)'; g.font = '600 15px "Chakra Petch", sans-serif'; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
+  g.fillText(mapArea.name, W2 - 14, H2 - 10);
+  if (!WINTER) { g.textAlign = 'left'; g.font = '600 14px "IBM Plex Mono", monospace'; g.fillStyle = 'rgba(244,241,234,0.8)'; g.fillText(`${String(Math.floor(weather.hour)).padStart(2, '0')}:${String(Math.floor(weather.hour % 1 * 60)).padStart(2, '0')}`, 14, H2 - 10); }
+  // you: a white arrowhead with a dark edge, in a faint ring
+  g.strokeStyle = 'rgba(244,241,234,0.28)'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, 17, 0, TAU); g.stroke();
+  g.fillStyle = '#f4f1ea'; g.strokeStyle = '#16151a'; g.lineWidth = 2.5; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(cx, cy - 11); g.lineTo(cx + 8, cy + 9); g.lineTo(cx, cy + 4); g.lineTo(cx - 8, cy + 9); g.closePath(); g.stroke(); g.fill();
   g.restore();
   // north (+z), on the rim
   const dirX = sh, dirY = -ch, tx = Math.abs(dirX) > 1e-6 ? (dirX > 0 ? (W2 - 14 - cx) / dirX : (14 - cx) / dirX) : Infinity, ty = Math.abs(dirY) > 1e-6 ? (dirY > 0 ? (H2 - 14 - cy) / dirY : (14 - cy) / dirY) : Infinity;
   const tt = Math.min(tx, ty), Nx = cx + dirX * tt, Ny = cy + dirY * tt;
-  g.fillStyle = 'rgba(18,16,24,0.85)'; g.beginPath(); g.arc(Nx, Ny, 10, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(18,16,24,0.9)'; g.beginPath(); g.arc(Nx, Ny, 10, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(244,241,234,0.5)'; g.lineWidth = 1; g.stroke();
   g.fillStyle = '#f4f1ea'; g.font = '700 12px "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('N', Nx, Ny + 1);
-  g.strokeStyle = 'rgba(243,236,228,0.22)'; g.lineWidth = 2; g.beginPath(); g.roundRect(1, 1, W2 - 2, H2 - 2, 14); g.stroke();
+  g.strokeStyle = 'rgba(8,10,16,0.9)'; g.lineWidth = 3; g.beginPath(); g.roundRect(1.5, 1.5, W2 - 3, H2 - 3, 14); g.stroke();
+  g.strokeStyle = 'rgba(243,236,228,0.3)'; g.lineWidth = 1; g.beginPath(); g.roundRect(3.5, 3.5, W2 - 7, H2 - 7, 12); g.stroke();
 }
 
 /* ---------------- GPS: a waypoint you set on the map (Tab, click), and the route to the job ---------------- */
@@ -1529,6 +1670,9 @@ const gps = (() => {
     add(from.link, from.si);
     for (const L of links) add(L);
     pts.push({ x: target.x, z: target.z });
+    // the lane points begin a little behind the car: drop those, so the line leaves the car going forwards
+    let k = 0, kd = Infinity; for (let i = 1; i < Math.min(pts.length - 1, 14); i++) { const d = (pts[i].x - car.x) ** 2 + (pts[i].z - car.z) ** 2; if (d < kd) { kd = d; k = i; } }
+    if (k && pts.length - k > 2) pts.splice(1, k);
     return pts;
   }
   function jobTarget() { return street?.goal || missions?.target || null; }
@@ -1560,75 +1704,261 @@ const gps = (() => {
   };
   return G;
 })();
-// Full map (Tab): shaded relief, the river, every road and the place names, drawn once; you and the
-// traffic on top
-const bigMap = { open: false, base: null };
-function drawBigMap() {
-  const cv = el('bigmap'), g = cv.getContext('2d'), S = cv.width, ext = city.EXT + 60, sc = S / (2 * ext);
-  const X = x => S / 2 - x * sc, Y = z => S / 2 - z * sc; // east (-x) to the right, north (+z) up
-  if (!bigMap.base && WORLD.ready) {
-    const off = document.createElement('canvas'); off.width = off.height = S;
-    const o = off.getContext('2d');
-    o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high'; o.drawImage(WORLD.canvas, 0, 0, S, S);
-    o.textAlign = 'center'; o.textBaseline = 'middle';
-    for (const l of city.labels) {
-      o.font = l.kind === 'town' ? '700 19px "Chakra Petch", sans-serif' : l.kind === 'village' ? '600 15px "Chakra Petch", sans-serif' : 'italic 500 14px "IBM Plex Mono", monospace';
-      o.lineWidth = 4; o.strokeStyle = 'rgba(18,16,24,0.85)'; o.strokeText(l.name.toUpperCase(), X(l.x), Y(l.z));
-      o.fillStyle = l.kind === 'river' ? '#a9d4ea' : l.kind === 'road' ? '#ffb547' : '#f3ece4'; o.fillText(l.name.toUpperCase(), X(l.x), Y(l.z));
-    }
-    bigMap.base = off;
+// Full map (Tab): the painted valley filling the screen, GTA-style. Scroll to zoom (towards the cursor), drag to
+// pan, click to drop a waypoint (click the pin to clear it). Place names, road names and the freeway's shields are
+// drawn fresh each frame, so they stay sharp at any zoom; the routes, blips, traffic and you sit on top, with a
+// legend, a scale bar, a compass and the name of whatever is under the cursor.
+const bigMap = { open: false, base: null, z: 0, cx: 0, cz: 0, zMin: 0.05, zMax: 1.5, last: -1e9, mx: -1, my: -1, drag: null, hover: null };
+// What the map names besides the towns: the summit, the wind farm, the named roads (each once, on its longest
+// stretch, turned to lie along it) and where the freeway's shields go
+const MAP_FEATURES = (() => {
+  let peak = { x: 2350, z: 2350, h: 0 };
+  for (let x = 1900; x <= 2800; x += 30) for (let z = 1900; z <= 2800; z += 30) { const h = city.groundAt(x, z); if (h > peak.h) peak = { x, z, h }; }
+  const T = city.country.turbines, wind = T.length ? { x: T.reduce((s, t) => s + t.x, 0) / T.length, z: T.reduce((s, t) => s + t.z, 0) / T.length } : null;
+  const longest = new Map();
+  for (const m of city.mapLines) { if (!m.name) continue; const b = longest.get(m.name); if (!b || m.pts.length > b.pts.length) longest.set(m.name, m); }
+  const roadNames = [...longest].map(([name, m]) => {
+    const i = m.pts.length >> 1, a = m.pts[Math.max(0, i - 15)], b = m.pts[Math.min(m.pts.length - 1, i + 15)];
+    let ang = Math.atan2(-(b.z - a.z), -(b.x - a.x)); if (Math.cos(ang) < 0) ang += Math.PI; // never upside down
+    return { name, x: m.pts[i].x, z: m.pts[i].z, a: ang, kind: m.kind };
+  });
+  const fw = city.mapLines.filter(m => m.kind === 'fwy').sort((a, b) => b.pts.length - a.pts.length)[0];
+  const shields = fw ? [0.14, 0.38, 0.62, 0.86].map(t => fw.pts[Math.round(t * (fw.pts.length - 1))]) : [];
+  return { peak, wind, roadNames, shields };
+})();
+// Everywhere with a blip and a name, for the tooltip
+function mapPlaces() {
+  const out = [], pl = street?.places;
+  if (pl) { out.push({ x: pl.GARAGE.x, z: pl.GARAGE.z, name: "Marlowe's Garage", sub: 'Jobs' }); for (const s of pl.SHOPS) out.push({ x: s.x, z: s.z, name: s.name, sub: 'Customs shop' }); }
+  if (empire) for (const id in empire.sites) {
+    const p = empire.sites[id].point, b = empire.empire.biz(id);
+    out.push({ x: p.x, z: p.z, name: b.name, sub: empire.empire.state.owned[id] ? 'Yours' : 'For sale · $' + b.price.toLocaleString('en-US') });
   }
-  if (!bigMap.base) {
-    const off = document.createElement('canvas'); off.width = off.height = S;
-    const o = off.getContext('2d');
-    // hillshade at half resolution, lit from the north-west
-    const R = S / 2, img = o.createImageData(R, R), px = 2 * ext / R;
-    const hAt = (i, j) => city.groundAt(ext - i * px, ext - j * px);
-    for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
-      const h = hAt(i, j), dx = hAt(i + 1, j) - h, dz = hAt(i, j + 1) - h;
-      const shade = clamp(0.62 + (dx + dz) * 0.09 / px * 4, 0.25, 1), lift = clamp(h / 260, 0, 1);
-      const k = (j * R + i) * 4, water = h < city.WATER - 0.3;
-      img.data[k] = water ? 34 : (30 + 26 * lift) * shade + 8; img.data[k + 1] = water ? 58 : (34 + 22 * lift) * shade + 8; img.data[k + 2] = water ? 78 : (40 + 20 * lift) * shade + 10; img.data[k + 3] = 255;
-    }
-    const tmp = document.createElement('canvas'); tmp.width = tmp.height = R; tmp.getContext('2d').putImageData(img, 0, 0);
-    o.imageSmoothingEnabled = true; o.drawImage(tmp, 0, 0, S, S);
-    o.lineCap = 'round'; o.lineJoin = 'round';
-    for (const kind of MAP_ORDER) {
-      if (kind === 'river') continue;
-      const [col, w] = ROAD_STYLE[kind];
-      o.strokeStyle = col; o.lineWidth = Math.max(1.1, w * sc * 1.5);
-      o.beginPath();
-      for (const m of city.mapLines) { if (m.kind !== kind) continue; m.pts.forEach((q, i) => i ? o.lineTo(X(q.x), Y(q.z)) : o.moveTo(X(q.x), Y(q.z))); }
-      o.stroke();
-    }
-    o.textAlign = 'center'; o.textBaseline = 'middle';
-    for (const l of city.labels) {
-      o.font = l.kind === 'town' ? '700 19px "Chakra Petch", sans-serif' : l.kind === 'village' ? '600 15px "Chakra Petch", sans-serif' : 'italic 500 14px "IBM Plex Mono", monospace';
-      o.lineWidth = 4; o.strokeStyle = 'rgba(18,16,24,0.8)'; o.strokeText(l.name.toUpperCase(), X(l.x), Y(l.z));
-      o.fillStyle = l.kind === 'river' ? '#8ec3dd' : l.kind === 'road' ? '#ffb547' : '#f3ece4'; o.fillText(l.name.toUpperCase(), X(l.x), Y(l.z));
-    }
-    bigMap.base = off;
-  }
-  g.drawImage(bigMap.base, 0, 0);
-  missions?.drawMap(g, x => X(x), (x,z) => Y(z)); empire?.drawMap(g, x => X(x), (x,z) => Y(z)); street?.drawMap(g, x => X(x), (x,z) => Y(z));
-  g.fillStyle = 'rgba(243,236,228,0.85)';
-  for (const v of traffic.vehicles) if (v.state !== 'idle') { g.fillStyle = v.police ? '#4f7bff' : 'rgba(243,236,228,0.85)'; g.fillRect(X(v.x) - 1.5, Y(v.z) - 1.5, 3, 3); }
-  gps.draw(g, x => X(x), (x, z) => Y(z), 3); gps.drawPin(g, x => X(x), (x, z) => Y(z));
-  g.fillStyle = 'rgba(243,236,228,0.75)'; g.font = '500 15px "IBM Plex Mono", monospace'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  g.fillText(gps.waypoint ? 'Click the pin to clear it · Tab to close' : 'Click to set a waypoint · Tab to close', 18, S - 18);
-  g.save(); g.translate(X(car.x), Y(car.z)); g.rotate(Math.PI - car.h + Math.PI);
-  g.fillStyle = '#ffb547'; g.strokeStyle = '#16151a'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -14); g.lineTo(9, 10); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
+  return out;
+}
+function mapLabel(g, text, x, y, font, fill, spacing = 0) {
+  g.font = font; if ('letterSpacing' in g) g.letterSpacing = spacing + 'px';
+  g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = 'rgba(12,14,20,0.88)'; g.strokeText(text, x, y);
+  g.fillStyle = fill; g.fillText(text, x, y);
+  if ('letterSpacing' in g) g.letterSpacing = '0px';
+}
+function mapArrow(g, x, y, h, s = 1) { // you: a white arrowhead with a dark edge
+  g.save(); g.translate(x, y); g.rotate(-h); g.scale(s, s);
+  g.fillStyle = '#f4f1ea'; g.strokeStyle = '#16151a'; g.lineWidth = 2.5; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(0, -13); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath(); g.stroke(); g.fill();
   g.restore();
 }
-// clicking the full map drops (or picks up) the waypoint
-el('bigmap').addEventListener('click', e => {
-  const cv = el('bigmap'), r = cv.getBoundingClientRect(), S = cv.width, ext = city.EXT + 60, sc = S / (2 * ext);
-  const px = (e.clientX - r.left) * S / r.width, py = (e.clientY - r.top) * S / r.height;
-  gps.set((S / 2 - px) / sc, (S / 2 - py) / sc);
-});
+const MAP_LEGEND = [['you', 'You'], ['pin', 'Waypoint'], ['way', 'Route to the waypoint'], ['job', 'Route to the job'], ['garage', "Marlowe's Garage"], ['shop', 'Apex Customs'], ['goal', 'Objective'], ['sale', 'Business for sale'], ['mine', 'Your business'], ['cop', 'Police']];
+function mapLegendIcon(g, kind, x, y) {
+  const disc = (col, label) => { g.fillStyle = col; g.strokeStyle = '#16151a'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#16151a'; g.font = '700 10px sans-serif'; g.textAlign = 'center'; g.fillText(label, x, y + 0.5); };
+  const square = col => { g.fillStyle = col; g.strokeStyle = '#16151a'; g.lineWidth = 1.5; g.beginPath(); g.rect(x - 6, y - 6, 12, 12); g.fill(); g.stroke(); g.fillStyle = '#16151a'; g.font = 'bold 9px sans-serif'; g.textAlign = 'center'; g.fillText('$', x, y + 0.5); };
+  const line = col => { g.lineCap = 'round'; g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 7; g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 8, y); g.stroke(); g.strokeStyle = col; g.lineWidth = 4; g.stroke(); };
+  if (kind === 'you') mapArrow(g, x, y + 1, 0, 0.6);
+  else if (kind === 'pin') { g.fillStyle = '#b46cff'; g.strokeStyle = '#16151a'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y - 3, 5, Math.PI, 0); g.lineTo(x, y + 6); g.closePath(); g.fill(); g.stroke(); }
+  else if (kind === 'way') line('#b46cff');
+  else if (kind === 'job') line('#f2c12e');
+  else if (kind === 'garage') disc('#ffcf3a', 'M');
+  else if (kind === 'shop') disc('#4fa3ff', '$');
+  else if (kind === 'goal') disc('#53e4c1', '!');
+  else if (kind === 'sale') square('rgba(216,230,255,.9)');
+  else if (kind === 'mine') square('#ffb547');
+  else if (kind === 'cop') { g.fillStyle = '#4f7bff'; g.strokeStyle = '#16151a'; g.lineWidth = 1.5; g.beginPath(); g.rect(x - 4, y - 4, 8, 8); g.fill(); g.stroke(); }
+}
+function drawBigMap() {
+  const cv = el('bigmap'), W = innerWidth, H = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2), now = performance.now(), ext = WORLD.ext;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const g = cv.getContext('2d'), B = bigMap, F = MAP_FEATURES;
+  B.zMin = Math.min(W, H) / (2 * ext) * 0.94; B.zMax = WORLD.sc * 2.3;
+  if (now - B.last > 400) { B.z = B.zMin * 2.6; B.cx = car.x; B.cz = car.z; B.drag = null; } // just opened: on you, close enough to read the streets
+  B.last = now;
+  B.z = clamp(B.z, B.zMin, B.zMax); B.cx = clamp(B.cx, -ext, ext); B.cz = clamp(B.cz, -ext, ext);
+  const Z = B.z, zt = clamp(Math.log(Z / B.zMin) / Math.log(B.zMax / B.zMin), 0, 1); // 0: the whole valley .. 1: right in
+  const SX = x => W / 2 - (x - B.cx) * Z, SY = z => H / 2 - (z - B.cz) * Z; // east (-x) to the right, north (+z) up
+  const X = (x, z) => SX(x), Y = (x, z) => SY(z);
+  const on = (x, y, m = 40) => x > -m && y > -m && x < W + m && y < H + m;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#0d131b'; g.fillRect(0, 0, W, H);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  if (WORLD.ready) {
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(WORLD.canvas, SX(ext), SY(ext), WORLD.S * Z / WORLD.sc, WORLD.S * Z / WORLD.sc);
+  } else { // the painting isn't finished yet: the bare road network will do
+    g.fillStyle = '#1b222b'; g.fillRect(SX(ext), SY(ext), 2 * ext * Z, 2 * ext * Z);
+    for (const kind of MAP_ORDER) {
+      const [col, w] = ROAD_STYLE[kind];
+      g.strokeStyle = col; g.lineWidth = Math.max(1.1, w * Z);
+      g.beginPath();
+      for (const m of city.mapLines) {
+        if (m.kind !== kind) continue;
+        const st = m.pts.length > 40 ? 4 : 1;
+        for (let i = 0; i < m.pts.length; i += st) { const q = m.pts[i]; i ? g.lineTo(SX(q.x), SY(q.z)) : g.moveTo(SX(q.x), SY(q.z)); }
+        const l = m.pts[m.pts.length - 1]; g.lineTo(SX(l.x), SY(l.z));
+      }
+      g.stroke();
+    }
+  }
+  // a 500 m grid, and the edge of the sheet
+  g.strokeStyle = 'rgba(10,14,22,0.1)'; g.lineWidth = 1; g.beginPath();
+  for (let v = -3000; v <= 3000; v += 500) { g.moveTo(SX(v), SY(ext)); g.lineTo(SX(v), SY(-ext)); g.moveTo(SX(ext), SY(v)); g.lineTo(SX(-ext), SY(v)); }
+  g.stroke();
+  g.strokeStyle = 'rgba(243,236,228,0.4)'; g.lineWidth = 1.5; g.strokeRect(SX(ext), SY(ext), 2 * ext * Z, 2 * ext * Z);
+
+  /* names */
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (Z > B.zMin * 1.6) for (const r of F.roadNames) { // along the road, just clear of it
+    const x = SX(r.x), y = SY(r.z); if (!on(x, y, 100)) continue;
+    g.save(); g.translate(x, y); g.rotate(r.a);
+    mapLabel(g, r.name, 0, -(8 + 5 * Z), `600 ${Math.round(11 + 3 * zt)}px "IBM Plex Mono", monospace`, r.kind === 'hwy' ? '#ffe7a0' : '#f3ece4', 0.5);
+    g.restore();
+  }
+  for (const p of F.shields) { // I-9
+    const x = SX(p.x), y = SY(p.z); if (!on(x, y)) continue;
+    g.beginPath(); g.moveTo(x - 10, y - 10); g.lineTo(x + 10, y - 10); g.quadraticCurveTo(x + 11, y + 4, x, y + 12); g.quadraticCurveTo(x - 11, y + 4, x - 10, y - 10); g.closePath();
+    g.fillStyle = '#24509c'; g.fill(); g.strokeStyle = '#f4f1ea'; g.lineWidth = 1.6; g.stroke();
+    g.fillStyle = '#c8322c'; g.fillRect(x - 8.6, y - 8.8, 17.2, 4.4);
+    g.fillStyle = '#ffffff'; g.font = '700 11px "Chakra Petch", sans-serif'; g.fillText('9', x, y + 2.5);
+  }
+  if (F.wind) { const x = SX(F.wind.x), y = SY(F.wind.z); if (on(x, y, 120)) mapLabel(g, 'Wind farm', x, y + 18 + 40 * Z, `italic 500 ${Math.round(12 + 3 * zt)}px "IBM Plex Mono", monospace`, '#e9eef2', 1); }
+  { // the summit: a spot height
+    const x = SX(F.peak.x), y = SY(F.peak.z);
+    if (on(x, y, 120)) {
+      g.fillStyle = '#16151a'; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y + 5); g.lineTo(x - 6, y + 5); g.closePath(); g.fill();
+      mapLabel(g, 'MOUNT ASHBY', x, y - 20, `700 ${Math.round(13 + 5 * zt)}px "Chakra Petch", sans-serif`, '#ffffff', 2.5);
+      mapLabel(g, Math.round(F.peak.h) + ' m', x, y + 17, `500 ${Math.round(11 + 2 * zt)}px "IBM Plex Mono", monospace`, '#e9eef2', 0);
+    }
+  }
+  for (const l of city.labels) {
+    if (l.kind === 'road') continue; // the freeway wears its shields instead
+    const x = SX(l.x), y = SY(l.z); if (!on(x, y, 160)) continue;
+    if (l.kind === 'river') mapLabel(g, l.name, x, y, `italic 500 ${Math.round(13 + 4 * zt)}px "IBM Plex Mono", monospace`, '#c4e6f7', 2);
+    else {
+      const size = (l === city.labels[0] ? 20 : l.kind === 'town' ? 15 : 12) + 7 * zt; // the city, the towns, the villages
+      mapLabel(g, l.name.toUpperCase(), x, y, `700 ${Math.round(size)}px "Chakra Petch", sans-serif`, l.kind === 'town' ? '#ffffff' : '#f2ead8', l.kind === 'town' ? 3 : 2);
+    }
+  }
+
+  /* routes, blips, the police, traffic and you */
+  gps.draw(g, X, Y, clamp(10 * Z, 3.5, 7));
+  missions?.drawMap(g, X, Y); empire?.drawMap(g, X, Y); street?.drawMap(g, X, Y);
+  const PS = police.state;
+  if (PS.level && !PS.seen && PS.lastSeen) {
+    g.strokeStyle = (now / 400 | 0) % 2 ? 'rgba(255,70,70,0.8)' : 'rgba(80,120,255,0.8)'; g.fillStyle = 'rgba(255,70,70,0.1)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(SX(PS.lastSeen.x), SY(PS.lastSeen.z), police.zoneR() * Z, 0, TAU); g.fill(); g.stroke();
+  }
+  g.strokeStyle = 'rgba(16,18,24,0.75)'; g.lineWidth = 1;
+  for (const v of traffic.vehicles) {
+    if (v.state === 'idle' || (!v.police && Z < B.zMin * 1.5)) continue;
+    const x = SX(v.x), y = SY(v.z), s = v.police ? 4 : 2.5;
+    g.fillStyle = v.police ? (v.state === 'pursue' && (now / 250 | 0) % 2 ? '#ff3b3b' : '#4f7bff') : 'rgba(243,236,228,0.92)';
+    g.fillRect(x - s, y - s, 2 * s, 2 * s); g.strokeRect(x - s, y - s, 2 * s, 2 * s);
+  }
+  gps.drawPin(g, X, Y);
+  { // you, with a ring that pulses outwards; out of view, a smaller arrow at the edge points the way back to you
+    const x = SX(car.x), y = SY(car.z), pulse = (now % 1600) / 1600;
+    if (on(x, y, 0)) {
+      g.strokeStyle = `rgba(244,241,234,${0.6 * (1 - pulse)})`; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 12 + 24 * pulse, 0, TAU); g.stroke();
+      mapArrow(g, x, y, car.h);
+    } else {
+      const dx = x - W / 2, dy = y - H / 2, k = Math.min((W / 2 - 40) / Math.abs(dx || 1e-6), (H / 2 - 110) / Math.abs(dy || 1e-6));
+      mapArrow(g, W / 2 + dx * k, H / 2 + dy * k, -Math.atan2(dx, -dy), 0.8);
+    }
+  }
+
+  /* what's under the cursor */
+  B.hover = null;
+  const inside = B.mx >= 0 && B.my >= 0 && B.mx <= W && B.my <= H;
+  if (inside && !B.drag?.moved) { let bd = 16; for (const p of mapPlaces()) { const d = Math.hypot(SX(p.x) - B.mx, SY(p.z) - B.my); if (d < bd) { bd = d; B.hover = p; } } }
+  if (B.hover) {
+    const p = B.hover, x = SX(p.x), y = SY(p.z);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.stroke();
+    g.font = '700 14px "Chakra Petch", sans-serif'; const w1 = g.measureText(p.name).width;
+    g.font = '500 11px "IBM Plex Mono", monospace'; const w = Math.max(w1, g.measureText(p.sub).width) + 22;
+    const bx = clamp(x + 18, 8, W - w - 8), by = clamp(y - 22, 8, H - 52);
+    g.fillStyle = 'rgba(14,16,24,0.92)'; g.strokeStyle = 'rgba(243,236,228,0.3)'; g.lineWidth = 1; g.beginPath(); g.roundRect(bx, by, w, 44, 8); g.fill(); g.stroke();
+    g.textAlign = 'left'; g.fillStyle = '#f4f1ea'; g.font = '700 14px "Chakra Petch", sans-serif'; g.fillText(p.name, bx + 11, by + 15);
+    g.fillStyle = '#ffb547'; g.font = '500 11px "IBM Plex Mono", monospace'; g.fillText(p.sub, bx + 11, by + 32);
+  }
+
+  /* the frame: title and where you are, the legend, a scale bar, a compass and the controls */
+  const top = g.createLinearGradient(0, 0, 0, 96); top.addColorStop(0, 'rgba(8,10,16,0.82)'); top.addColorStop(1, 'rgba(8,10,16,0)');
+  g.fillStyle = top; g.fillRect(0, 0, W, 96);
+  const bot = g.createLinearGradient(0, H - 90, 0, H); bot.addColorStop(0, 'rgba(8,10,16,0)'); bot.addColorStop(1, 'rgba(8,10,16,0.82)');
+  g.fillStyle = bot; g.fillRect(0, H - 90, W, 90);
+  const km = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m / 10) * 10 + ' m';
+  let line = 'YOU · ' + (city.zoneAt(car.x, car.z, true) || 'Open country').toUpperCase();
+  const way = gps.routes.way;
+  if (gps.waypoint) { let d = 0; if (way) for (let i = 1; i < way.length; i++) d += Math.hypot(way[i].x - way[i - 1].x, way[i].z - way[i - 1].z); else d = Math.hypot(gps.waypoint.x - car.x, gps.waypoint.z - car.z); line += '   ·   WAYPOINT · ' + km(d) + (way ? ' by road' : ''); }
+  if (inside && !B.hover) { const wx = B.cx - (B.mx - W / 2) / Z, wz = B.cz - (B.my - H / 2) / Z; if (Math.abs(wx) < ext && Math.abs(wz) < ext) line += '   ·   CURSOR · ' + (city.zoneAt(wx, wz, true) || 'Open country').toUpperCase() + ' · ' + km(Math.hypot(wx - car.x, wz - car.z)); }
+  g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = '500 13px "IBM Plex Mono", monospace';
+  g.fillStyle = 'rgba(14,16,24,0.9)'; g.strokeStyle = 'rgba(243,236,228,0.22)'; g.lineWidth = 1; g.beginPath(); g.roundRect(12, 12, Math.max(300, g.measureText(line).width + 28), WORLD.ready ? 66 : 88, 12); g.fill(); g.stroke();
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#f4f1ea'; g.font = '700 26px "Chakra Petch", sans-serif'; if ('letterSpacing' in g) g.letterSpacing = '5px';
+  g.fillText('ASHBY VALLEY', 24, 34); if ('letterSpacing' in g) g.letterSpacing = '0px';
+  g.fillStyle = 'rgba(243,236,228,0.82)'; g.font = '500 13px "IBM Plex Mono", monospace'; g.fillText(line, 25, 62);
+  if (!WORLD.ready) { g.fillStyle = '#ffb547'; g.fillText('Surveying the valley…', 25, 84); }
+  if (W >= 760 && H >= 480) {
+    const lw = 222, lx = W - lw - 12, ly = 12, lh = 44 + MAP_LEGEND.length * 23;
+    g.fillStyle = 'rgba(14,16,24,0.9)'; g.strokeStyle = 'rgba(243,236,228,0.22)'; g.lineWidth = 1; g.beginPath(); g.roundRect(lx, ly, lw, lh, 12); g.fill(); g.stroke();
+    g.fillStyle = 'rgba(243,236,228,0.6)'; g.font = '600 11px "IBM Plex Mono", monospace'; g.textAlign = 'left'; g.fillText('LEGEND', lx + 16, ly + 20);
+    MAP_LEGEND.forEach(([kind, name], i) => {
+      const y = ly + 46 + i * 23;
+      g.textBaseline = 'middle'; mapLegendIcon(g, kind, lx + 26, y);
+      g.textAlign = 'left'; g.fillStyle = '#f4f1ea'; g.font = '500 13px "Chakra Petch", sans-serif'; g.fillText(name, lx + 48, y + 0.5);
+    });
+  }
+  { // scale bar: a round number of metres about 130 px long
+    const want = 130 / Z, pow = 10 ** Math.floor(Math.log10(want)), nice = [1, 2, 5, 10].map(m => m * pow).filter(v => v <= want).pop(), len = nice * Z, x = 24, y = H - 52;
+    g.fillStyle = '#16151a'; g.fillRect(x - 1, y - 1, len + 2, 7);
+    g.fillStyle = '#f4f1ea'; g.fillRect(x, y, len / 2, 5); g.fillStyle = '#8b8f98'; g.fillRect(x + len / 2, y, len / 2, 5);
+    g.fillStyle = '#f4f1ea'; g.font = '500 12px "IBM Plex Mono", monospace'; g.textAlign = 'left'; g.fillText(nice >= 1000 ? nice / 1000 + ' km' : nice + ' m', x + len + 10, y + 3);
+  }
+  g.fillStyle = 'rgba(243,236,228,0.78)'; g.font = '500 13px "IBM Plex Mono", monospace'; g.textAlign = 'left';
+  g.fillText(`Scroll to zoom · Drag to pan · ${gps.waypoint ? 'Click the pin to clear it' : 'Click to set a waypoint'} · Tab to close`, 24, H - 22);
+  { // north is up
+    const x = W - 50, y = H - 54;
+    g.fillStyle = 'rgba(14,16,24,0.84)'; g.strokeStyle = 'rgba(243,236,228,0.3)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y, 26, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = '#ff5a4e'; g.beginPath(); g.moveTo(x, y - 20); g.lineTo(x + 6, y + 2); g.lineTo(x - 6, y + 2); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(243,236,228,0.55)'; g.beginPath(); g.moveTo(x, y + 20); g.lineTo(x + 6, y + 2); g.lineTo(x - 6, y + 2); g.closePath(); g.fill();
+    g.fillStyle = '#f4f1ea'; g.font = '700 11px "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.fillText('N', x, y + 9);
+  }
+}
+// The full map's mouse: the wheel zooms about the cursor, a drag pans, and a click that didn't turn into a drag
+// drops (or picks up) the waypoint, on the place under the cursor if there is one
+{
+  const cv = el('bigmap'), B = bigMap;
+  const at = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * innerWidth / r.width, y: (e.clientY - r.top) * innerHeight / r.height }; };
+  cv.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const p = at(e); B.drag = { x: p.x, y: p.y, cx: B.cx, cz: B.cz, moved: false };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* no capture: the drag just ends at the edge */ }
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = at(e), d = B.drag; B.mx = p.x; B.my = p.y;
+    if (!d || (!d.moved && Math.hypot(p.x - d.x, p.y - d.y) < 5)) return;
+    d.moved = true; B.cx = d.cx + (p.x - d.x) / B.z; B.cz = d.cz + (p.y - d.y) / B.z;
+  });
+  cv.addEventListener('pointerup', e => {
+    const d = B.drag; B.drag = null;
+    if (!d || d.moved || e.button !== 0) return;
+    // on the pin (as it looks on screen, whatever the zoom) picks it up; anywhere else moves it there
+    const p = at(e), wp = gps.waypoint, t = B.hover || { x: B.cx - (p.x - innerWidth / 2) / B.z, z: B.cz - (p.y - innerHeight / 2) / B.z };
+    const onPin = wp && (B.hover ? Math.hypot(wp.x - t.x, wp.z - t.z) < 1 : Math.hypot(innerWidth / 2 - (wp.x - B.cx) * B.z - p.x, innerHeight / 2 - (wp.z - B.cz) * B.z - 4 - p.y) < 14);
+    gps.waypoint = null; gps.routes.way = null;
+    if (!onPin) gps.set(t.x, t.z);
+  });
+  cv.addEventListener('pointercancel', () => { B.drag = null; });
+  cv.addEventListener('pointerleave', () => { B.mx = B.my = -1; });
+  cv.addEventListener('mousemove', e => e.stopPropagation()); // panning the map isn't looking around
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); e.stopPropagation();
+    const p = at(e), wx = B.cx - (p.x - innerWidth / 2) / B.z, wz = B.cz - (p.y - innerHeight / 2) / B.z;
+    B.z = clamp(B.z * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0016)), B.zMin, B.zMax);
+    B.cx = wx + (p.x - innerWidth / 2) / B.z; B.cz = wz + (p.y - innerHeight / 2) / B.z; // the point under the cursor stays put
+  }, { passive: false });
+}
 // GTA-style HUD: the radar bottom-left with health and armour under it, stars and cash top-right, the weapon
 // under the cash. H switches to the detailed driving HUD (telemetry, damage map, rev counter, controls).
-const hudEl = { hpNum: el('hud-hp'), cash: el('hud-cash'), delta: el('hud-delta'), weapon: el('hud-weapon'), hp: el('hp-bar'), ar: el('ar-bar'), radio: el('radio-name') };
+const hudEl = { hpNum: el('hud-hp'), cash: el('hud-cash'), delta: el('hud-delta'), weapon: el('hud-weapon'), hp: el('hp-bar'), ar: el('ar-bar'), sp: el('sp-bar'), area: el('area-pop'), radio: el('radio-name') };
 let shownCash = null, deltaUntil = 0;
 function setHudMode(gta) {
   document.body.classList.toggle('gta', gta);
@@ -1650,6 +1980,8 @@ function updateGtaHud() {
   document.body.classList.toggle('lowhp', crime.health < 30 && started);
   hudEl.hp.classList.toggle('low', crime.health < 30);
   hudEl.ar.style.width = clamp(crime.armor, 0, 100) + '%';
+  hudEl.sp.style.width = clamp(ability.v, 0, 1) * 100 + '%'; hudEl.sp.className = ability.on ? 'on' : ability.v <= 0.12 ? 'empty' : ''; hudEl.sp.style.background = ability.v <= 0.12 ? '' : CHARS[who.cur].color;
+  if (phone.open) el('phone-time').textContent = `${String(Math.floor(weather.hour)).padStart(2, '0')}:${String(Math.floor(weather.hour % 1 * 60)).padStart(2, '0')}`;
   const w = crime.weapon, a = crime.ammo?.[w];
   hudEl.weapon.textContent = crime.onFoot && w > 0 && a ? `${['', 'PISTOL', 'SMG', 'SHOTGUN'][w]}  ${a.mag} / ${a.res}` : crime.onFoot && w === 0 ? 'FISTS' : '';
 }
@@ -1704,9 +2036,10 @@ function syncCar(dt) {
   }
   const braking = car.brake > 0.1 && car.gear !== 0 || (car.gear === 0 && car.auto && car.throttle < 0.1 && car.brake > 0.1);
   const tailPart = kit.parts.find(pt => pt.name === 'Taillight'), tailOk = !tailPart || !tailPart.broken;
-  tailMat.emissiveIntensity = tailOk ? (braking || car.hb > 0.5 ? 4 : 0.8) : 0;
+  tailMat.emissiveIntensity = (tailOk ? (braking || car.hb > 0.5 ? 4 : 0.8) : 0) * GLOW.k;
   tailGlow.intensity = tailOk ? (braking ? 3 : 0.4) : 0;
-  headSpot.intensity = 2 * kit.parts.filter(pt => pt.name === 'Headlight' && !pt.broken).length;
+  headSpot.intensity = 2 * kit.parts.filter(pt => pt.name === 'Headlight' && !pt.broken).length * (1 + 6 * GLOW.n); headSpot.distance = 40 + 45 * GLOW.n; // by day a hint on the tarmac; by night what you drive by
+  if (kit.heads) for (const hm of kit.heads) if (hm.material && hm.material.emissiveIntensity > 0) hm.material.emissiveIntensity = 3 * GLOW.k;
   crashEffects(dt);
 
   // skid marks & smoke from each wheel contact
@@ -1731,7 +2064,8 @@ function syncCar(dt) {
   sun.target.position.copy(shadowFocus);
   sun.position.copy(shadowFocus).addScaledVector(sunDir, 300);
   sky.position.copy(camera.position);
-  { const hz = hazeAt(Math.atan2(camLook.x - camera.position.x, camLook.z - camera.position.z)); scene.fog.color.setRGB(hz[0], hz[1], hz[2]); }
+  { const hz = hazeAt(Math.atan2(camLook.x - camera.position.x, camLook.z - camera.position.z)), o = weather.cloud, l = (hz[0] * 0.3 + hz[1] * 0.59 + hz[2] * 0.11) * 0.8;
+    scene.fog.color.setRGB(lerp(hz[0], l * 0.95, o), lerp(hz[1], l, o), lerp(hz[2], l * 1.07, o)); } // under cloud the haze goes grey
 }
 
 /* ---------------- Falling snow ---------------- */
@@ -1764,8 +2098,80 @@ const snow = (() => {
   return { update(dt) { mat.uniforms.t.value += dt; mat.uniforms.cam.value.copy(camera.position); mat.uniforms.scale.value = innerHeight * 0.9; } };
 })();
 
+/* ---------------- Weather ---------------- */
+// As in GTA V, a day is forty-eight minutes long (two real minutes to the game hour) and it starts at two in the
+// afternoon. Towards seven the light goes amber, then blue; by half past eight it's night: the exposure comes down,
+// the sky sinks to deep blue with stars, and every street lamp, lit window, headlight and sign is turned up to
+// stand out against it. (The sun's place in the sky is the photograph's, so the moon rises exactly where it set.)
+// And the weather turns: long clear spells, then cloud rolls in (the photographed sky drained to grey,
+// the sun weak, the haze thick), then rain: streaks falling round the camera, the roads darkening and turning to
+// mirrors, a fifth less grip on tarmac, the odd flash of lightning. Then it clears and the roads dry.
+// Summer only: the winter valley has its snow.
+const weather = (() => {
+  const W = { cloud: 0, rain: 0, wet: 0, flash: 0, phase: 'clear', t: 240 + Math.random() * 180, hour: 14, night: 0, dusk: 0, update() {}, set() {}, setHour() {} };
+  if (WINTER) return W;
+  const N = 7000, BOX = 90, H = 44, pos = new Float32Array(N * 3), seedA = new Float32Array(N);
+  for (let i = 0; i < N; i++) { pos[i * 3] = Math.random() * BOX; pos[i * 3 + 1] = Math.random() * H; pos[i * 3 + 2] = Math.random() * BOX; seedA[i] = Math.random(); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seedA, 1));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { t: { value: 0 }, cam: { value: new THREE.Vector3() }, scale: { value: 300 }, amt: { value: 0 } },
+    vertexShader: `attribute float seed; uniform float t; uniform vec3 cam; uniform float scale; uniform float amt; varying float vA;
+      void main(){
+        vec3 p = position;
+        p.y -= t * (21.0 + seed * 9.0); p.x += t * 2.4;
+        vec3 o = cam - vec3(${BOX / 2}.0, ${H / 2}.0, ${BOX / 2}.0);
+        p = mod(p - o, vec3(${BOX}.0, ${H}.0, ${BOX}.0)) + o;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float d = -mv.z;
+        gl_PointSize = clamp(scale * (0.55 + seed * 0.5) / d, 3.0, 40.0);
+        vA = step(seed, amt * 1.05) * smoothstep(${BOX / 2}.0, 12.0, d) * smoothstep(0.4, 1.5, d);
+      }`,
+    fragmentShader: `varying float vA; void main(){ vec2 q = gl_PointCoord - 0.5; if (vA < 0.01 || abs(q.x + q.y * 0.1) > 0.035) discard; gl_FragColor = vec4(vec3(0.78, 0.83, 0.9), vA * (1.0 - abs(q.y) * 2.0) * 0.42); }`,
+  });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 4; pts.visible = false; scene.add(pts);
+  const sunCol = sun.color.clone(), sunI = sun.intensity, hemiI = hemi.intensity, fog0 = scene.fog.density, expo0 = renderer.toneMappingExposure, grey = new THREE.Color('#aab4c2');
+  const NEXT = { clear: ['cloud', 50, 80], cloud: ['rain', 110, 170], rain: ['clearing', 45, 70], clearing: ['clear', 280, 480] };
+  const WANT = { clear: [0, 0], cloud: [0.8, 0], rain: [1, 1], clearing: [0.45, 0] };
+  let flashT = 6;
+  const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const nightAt = h => h >= 12 ? sm(18.6, 20.6, h) : 1 - sm(4.4, 6.4, h), duskAt = h => Math.max(0, 1 - Math.abs(h - 19.1) / 1.4, 1 - Math.abs(h - 5.9) / 1.4);
+  const amber = new THREE.Color('#ff9a55'), moon = new THREE.Color('#9fb6ff'), DAY_SECS = 48 * 60;
+  W.setHour = h => { W.hour = ((h % 24) + 24) % 24; };
+  W.set = (phase, secs) => { if (WANT[phase]) { W.phase = phase; W.t = secs ?? 120; } };
+  W.jump = phase => { W.set(phase, 600); [W.cloud, W.rain] = WANT[W.phase]; W.wet = W.rain; }; // for tests and screenshots: straight there
+  W.update = (dt, real) => {
+    if ((W.t -= dt) <= 0) { const [p, a, b] = NEXT[W.phase]; W.phase = p; W.t = a + Math.random() * (b - a); }
+    const [c, r] = WANT[W.phase], k = 1 - Math.exp(-dt / 9);
+    W.cloud += (c - W.cloud) * k; W.rain += (r - W.rain) * k;
+    W.wet = clamp(W.wet + (W.rain > 0.3 ? dt / 14 : -dt / 75), 0, 1); // soaked in a quarter of a minute, a good minute to dry
+    // lightning: a white flicker now and then when it's really coming down
+    if (W.rain > 0.8 && (flashT -= dt) <= 0) { flashT = 9 + Math.random() * 22; W.flash = 1; }
+    W.flash = Math.max(0, W.flash - real * 5);
+    W.hour = (W.hour + dt * 24 / DAY_SECS) % 24;
+    const o = W.cloud, n = W.night = nightAt(W.hour), dk = W.dusk = duskAt(W.hour) * (1 - 0.7 * o), gk = 1 + 2.6 * n;
+    GLOW.n = n; GLOW.k = gk; city.setNight(n, gk);
+    skyMat.uniforms.winter.value = 0.82 * o; skyMat.uniforms.night.value = n; skyMat.uniforms.dusk.value = dk; skyMat.uniforms.starK.value = 2.4 * (1 - o) * n;
+    sun.intensity = sunI * (1 - 0.66 * o) * (1 - 0.76 * n) + W.flash * 2 * gk; sun.color.copy(sunCol).lerp(grey, o * 0.8).lerp(amber, dk * 0.75).lerp(moon, n * 0.85);
+    hemi.intensity = (hemiI + 0.24 * o) * (1 - 0.35 * n) + W.flash * 1.5 * gk;
+    scene.fog.density = fog0 + 0.00042 * o + 0.0005 * W.rain;
+    renderer.toneMappingExposure = expo0 * (1 - 0.1 * o) * (1 - 0.55 * n);
+    const u = post.finalMat.uniforms; u.sat.value = (1.08 - 0.16 * o) * (1 - 0.2 * n) + 0.08 * dk;
+    u.highTint.value.set(lerp(1.05 - 0.05 * o, 0.88, n) + 0.05 * dk, lerp(1.012 - 0.008 * o, 0.97, n), lerp(0.935 + 0.075 * o, 1.12, n) - 0.06 * dk);
+    u.shadowTint.value.set(lerp(0.95, 0.72, n) + 0.03 * dk, lerp(0.99, 0.88, n), lerp(1.05, 1.26, n));
+    post.fx.shaftAmt = 0.3 * (1 - o) * (1 - n);
+    city.setWet(W.wet);
+    pts.visible = W.rain > 0.02;
+    if (pts.visible) { mat.uniforms.t.value += dt; mat.uniforms.amt.value = W.rain; mat.uniforms.cam.value.copy(camera.position); mat.uniforms.scale.value = innerHeight * 0.9; }
+  };
+  return W;
+})();
+
 /* ---------------- Loop ---------------- */
 const post = createPost(renderer, scene, camera);
+post.fx.sunDir = sunDir;
+if (WINTER) { const u = post.finalMat.uniforms; u.sat.value = 1.02; u.highTint.value.set(1.01, 1.0, 0.99); u.contrast.value = 0.12; } // the snowed-in valley keeps its cold, flat light
 // Graphics quality (G cycles; drops automatically if the frame rate can't be held): resolution cap, shadow map
 // size, ambient occlusion, bloom
 const QUALITY = [
@@ -1777,7 +2183,7 @@ const QUALITY = [
 let quality = 1, qualityPinned = false, upT = 0;
 function setQuality(q, auto = false, silent = false) {
   quality = q; const Q = QUALITY[q];
-  post.ao = Q.ao; post.finalMat.uniforms.bloom.value = Q.bloom; grass.enabled = Q.grass && !WINTER; // under snow, no grass post.setSamples(Q.msaa);
+  post.ao = Q.ao; post.finalMat.uniforms.bloom.value = Q.bloom; post.fx.shafts = q > 0; grass.enabled = Q.grass && !WINTER; // under snow, no grass post.setSamples(Q.msaa);
   if (sun.shadow.mapSize.x !== Q.shadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   if (pixelRatio > Q.dpr) { pixelRatio = Math.min(devicePixelRatio, Q.dpr); renderer.setPixelRatio(pixelRatio); resize(); }
   if (silent) return;
@@ -1857,7 +2263,7 @@ el('open-garage').onclick = () => { start(); toggleGarage(); };
 el('garage-filter').onchange = () => renderCards(el('garage-cards'), pickGarage);
 addEventListener('blur', clearDrivingInput);
 addEventListener('keydown', e => {
-  if (e.code === 'Escape') { street?.closeAll(); toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
+  if (e.code === 'Escape') { togglePhone(false); street?.closeAll(); toggleGarage(false); missions?.toggle(false); if (empire?.open) empire.toggle(false); el('mission-result').hidden = true; clearDrivingInput(); }
   if (e.code === 'KeyG' && started && !missions?.paused && el('garage').hidden && !crime?.onFoot) { qualityPinned = true; setQuality((quality + 2) % 3); }
 });
 // First time in: the controls panel stays up for a while even on the street HUD (H brings it back any time)
@@ -1998,14 +2404,17 @@ function showBanner(title, sub) {
   b.className = 'show'; clearTimeout(showBanner.t); showBanner.t = setTimeout(() => { b.className = ''; }, 3000);
 }
 // MISSION PASSED / MISSION FAILED across the middle of the screen (doesn't stop play)
-function showPassed(ok, title, sub) {
+function showPassed(ok, title, sub, g) {
   const b = el('passed'); if (!b) return;
   b.querySelector('b').textContent = ok ? 'MISSION PASSED' : 'MISSION FAILED';
   b.querySelector('em').textContent = title || '';
   b.querySelector('span').textContent = sub || '';
+  // the medal and the gold objectives, where the job has them
+  const ul = b.querySelector('ul');
+  if (ul) { ul.replaceChildren(); if (ok && g) { const add = (cls, text) => { const li = document.createElement('li'); li.className = cls; li.textContent = text; ul.append(li); }; add('medal ' + g.medal, g.medal.toUpperCase() + ' MEDAL'); for (const o of g.list) add(o.ok ? 'ok' : 'no', o.label); } }
   b.className = ok ? 'show ok' : 'show fail';
   radio.sting(ok ? 'passed' : 'failed');
-  clearTimeout(showPassed.t); showPassed.t = setTimeout(() => { b.className = ''; }, 5200);
+  clearTimeout(showPassed.t); showPassed.t = setTimeout(() => { b.className = ''; }, g ? 7500 : 5200);
 }
 // Mission text, GTA-style: a title card when a job starts, then lines of dialogue and the objective as subtitles
 // along the bottom of the screen, one after another, key words highlighted.
@@ -2028,6 +2437,88 @@ const ui = (() => {
     clear() { q.length = 0; cur = null; box.classList.remove('show'); },
   };
 })();
+/* ---------------- Three protagonists (X) ---------------- */
+// As in GTA V you play three people, each wherever you last left them: press X (or pick one on the phone) and the
+// camera lifts into the sky, crosses the valley and comes down on the next. They share the money and the garage;
+// what differs is the special ability: the wheelman slows time best at the wheel, the shooter on foot, and the
+// bruiser doesn't slow time at all: while his bar drains his armour comes back as fast as it's shot off.
+const CHARS = [
+  { name: 'Cole', role: 'The wheelman', color: '#7fe39a', ability: 'drive', home: null },
+  { name: 'Vince', role: 'The shooter', color: '#6fb2ff', ability: 'aim', home: 'Westfield' },
+  { name: 'Ray', role: 'The bruiser', color: '#ffa94d', ability: 'rage', home: 'Pine Hollow' },
+];
+const who = { cur: 0, poses: [null, null, null], sw: null };
+function charHome(i) {
+  const l = city.labels.find(l => l.name === CHARS[i].home) || { x: city.start.x, z: city.start.z };
+  const lane = city.nearestLanePose(l.x + 30, l.z, city.groundAt(l.x + 30, l.z)) || city.start;
+  const foot = crime.pavementNear(lane.x, lane.z, lane.y) || lane;
+  return { x: foot.x, z: foot.z, y: foot.y ?? city.heightAt(foot.x, foot.z), h: lane.h || 0 };
+}
+function saveChars() { const st = career.state.story || (career.state.story = { done: 0 }); st.chars = { cur: who.cur, poses: who.poses.map(p => p ? [Math.round(p.x * 10) / 10, Math.round(p.z * 10) / 10, Math.round((p.h || 0) * 100) / 100] : null) }; career.save(); }
+{ const c = career.state.story?.chars; if (c) { who.cur = c.cur || 0; who.poses = [0, 1, 2].map(i => c.poses?.[i] ? { x: c.poses[i][0], z: c.poses[i][1], h: c.poses[i][2] || 0 } : null); } }
+function switchChar(to) {
+  if (!started || downing || who.sw || to === who.cur || !CHARS[to]) return false;
+  if (street?.active || missions?.engine.active || police.state.level > 0) { crime.say('Not in the middle of this.', 2.5); return false; }
+  if (!crime.onFoot) exitCar();
+  who.poses[who.cur] = { x: car.x, z: car.z, y: car.y, h: car.h };
+  who.sw = { to, t: 0, done: false }; ability.on = false; if (phone.open) togglePhone(false);
+  return true;
+}
+// the switch itself: up into the sky over one, across, and down onto the other (called after the camera has been set)
+function updateSwitch(real) {
+  const s = who.sw; if (!s) return;
+  const T = 2.8, half = T / 2; s.t += real;
+  if (!s.done && s.t >= half) {
+    s.done = true; who.cur = s.to;
+    const p = who.poses[s.to] || charHome(s.to);
+    crime.startAt({ x: p.x, z: p.z, y: p.y ?? city.heightAt(p.x, p.z), h: p.h || 0 }); camSnap = true; carGroup.visible = false;
+    saveChars(); ui.title(CHARS[s.to].name, CHARS[s.to].role);
+  }
+  const u = clamp(s.t < half ? s.t / half : (T - s.t) / half, 0, 1), k = u * u * (3 - 2 * u);
+  camera.position.y += 340 * k; camera.lookAt(car.x, car.y + 1, car.z);
+  if (s.t >= T) who.sw = null;
+}
+
+/* ---------------- The phone (P) ---------------- */
+// Missions (every Marlowe job you've done, its medal and the time to beat, and a replay), contacts (who to see
+// next, with a waypoint), your characters, your numbers, and a quick save. The valley carries on while you look.
+const phone = { open: false, page: 'home' };
+function phoneRender() {
+  const body = el('phone-body'), e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const mm = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`, back = '<button data-go="home">‹ Back</button>';
+  let h = '';
+  if (phone.page === 'home') h = `<div class="apps"><button data-go="missions"><i>★</i>Missions</button><button data-go="contacts"><i>☎</i>Contacts</button><button data-go="chars"><i>⇄</i>Switch</button><button data-go="stats"><i>≡</i>Stats</button></div><button data-act="save">Quick save<small>Everything is also saved as you go</small></button>`;
+  else if (phone.page === 'missions') {
+    h = '<h4>Missions</h4>' + street.jobs.map((j, i) => { const done = i < street.done, m = street.medals[j.name];
+      return `<button data-replay="${i}" ${done ? '' : 'disabled'}>${e(j.name)}<small>${done ? `<span class="${m || 'bronze'}">${(m || 'bronze').toUpperCase()}</span> · beat ${mm(j.par)} · tap to replay` : i === street.done ? 'Next: see Marlowe (yellow M)' : 'Locked'}</small></button>`; }).join('')
+      + `<button disabled>The Ashby Score<small>${street.heistDone ? `<span class="${street.medals['The Ashby Score'] || 'bronze'}">${(street.medals['The Ashby Score'] || 'bronze').toUpperCase()}</span> · done` : street.heist.ready ? 'Lena is waiting: the green H' : 'Do three jobs for Marlowe first'}</small></button>` + back;
+  } else if (phone.page === 'contacts') {
+    const hs = street.heist.state;
+    h = `<h4>Contacts</h4><button data-call="marlowe">Marlowe<small>${street.done < street.jobs.length ? 'Has a job for you' : 'Retired'}</small></button><button data-call="lena">Lena<small>${street.heistDone ? 'Lying low' : street.heist.ready ? (hs.phase === 0 ? 'Wants to plan a score' : hs.phase === 1 ? `Setup ${hs.setups + 1} of 2` : 'Ready when you are') : 'Not yet'}</small></button><button data-call="customs">Apex Customs<small>Repairs, resprays, ammo, armour</small></button>` + back;
+  } else if (phone.page === 'chars') h = '<h4>Switch</h4>' + CHARS.map((c, i) => `<button data-char="${i}" ${i === who.cur ? 'disabled' : ''}><span style="color:${c.color}">${c.name}</span><small>${c.role}${i === who.cur ? ' · you are here' : ''}</small></button>`).join('') + back;
+  else if (phone.page === 'stats') {
+    const m = Object.values(street.medals), n = t => m.filter(x => x === t).length;
+    h = `<h4>Stats</h4><p>Cash  $${career.state.cash.toLocaleString('en-US')}\nRank  ${career.level}\nJobs for Marlowe  ${street.done} of ${street.jobs.length}\nMedals  ${n('gold')} gold · ${n('silver')} silver · ${n('bronze')} bronze\nThe Ashby Score  ${street.heistDone ? 'done' : 'not yet'}\nRandom events  ${street.eventsDone}\nHidden packages  ${street.packs.found} of ${street.packs.list.length}\nPlaying as  ${CHARS[who.cur].name}</p>` + back;
+  }
+  body.innerHTML = h;
+}
+function togglePhone(on = !phone.open) {
+  if (on && (!started || downing || who.sw)) return;
+  phone.open = on; el('phone').hidden = !on; phone.page = 'home';
+  if (on) { document.exitPointerLock?.(); phoneRender(); }
+}
+function phoneWaypoint(p, who2, line) { gps.waypoint = { x: p.x, z: p.z }; gps.t = 0; ui.talk([[who2, line]]); togglePhone(false); }
+el('phone-body').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.go) { phone.page = b.dataset.go; phoneRender(); }
+  else if (b.dataset.act === 'save') { career.save(); crime.say(career.saveError ? 'Could not save here.' : 'Saved.', 2); togglePhone(false); }
+  else if (b.dataset.replay) { togglePhone(false); street.replay(+b.dataset.replay); }
+  else if (b.dataset.char) switchChar(+b.dataset.char);
+  else if (b.dataset.call === 'marlowe') { if (street.done < street.jobs.length) phoneWaypoint(street.places.GARAGE, 'MARLOWE', 'Come by the garage. I marked it for you.'); else { ui.talk([['MARLOWE', 'I\'m retired, kid. Go and spend it.']]); togglePhone(false); } }
+  else if (b.dataset.call === 'lena') { if (street.heist.ready) phoneWaypoint(street.places.SAFE, 'LENA', 'Planning room. You know where. I\'ve put it on your map.'); else { ui.talk([['LENA', street.heistDone ? 'We did it. Don\'t call this number for a while.' : 'Not yet. Earn Marlowe\'s trust first.']]); togglePhone(false); } }
+  else if (b.dataset.call === 'customs') { const sh = street.places.SHOPS.slice().sort((a, b2) => Math.hypot(a.x - car.x, a.z - car.z) - Math.hypot(b2.x - car.x, b2.z - car.z))[0]; phoneWaypoint(sh, 'APEX CUSTOMS', `${sh.name.replace('Apex Customs ', '')} is your nearest. It\'s on your map.`); }
+});
+
 // Radio: a station comes on when you get in (as you left it, or a random one); , and . change station
 const radio = createRadio(audio);
 let radioUserOff = false;
@@ -2064,7 +2555,7 @@ const travelTo = pose => { start(); timeScale = 1; clearDrivingInput(); camSnap 
   if (crime?.onFoot) crime.setFootPosition(crime.pavementNear(pose.x, pose.z, pose.y) || pose); else resetCar(pose); };
 empire = createEmpireSystem({city,scene,car,career,missions,catalog,travel:travelTo,onPause:clearDrivingInput});
 // Street life: Marlowe's jobs and Apex Customs (src/street.js)
-street = createStreet({ scene, city, car, career, crime, police, missions, onPause: clearDrivingInput,
+street = createStreet({ scene, city, car, career, crime, police, missions, traffic, onPause: clearDrivingInput,
   getRide: () => crime.onFoot ? null : { preset, owned: rideOwned && career.state.owned.includes(preset.id), damage: soft.damage || 0, bullet: harm.bullet, tyres: harm.tyres },
   // hand the car over: you're left standing beside where it was, and it's gone
   dropCar: () => {
@@ -2074,7 +2565,7 @@ street = createStreet({ scene, city, car, career, crime, police, missions, onPau
     crime.startAt(pose); carGroup.visible = false; camSnap = true;
   },
   repairCar: () => { repairCar(); soft.refresh(); applyDamage(); },
-  onResult: (ok, title, sub) => showPassed(ok, title, sub), ui });
+  onResult: (ok, title, sub, g) => showPassed(ok, title, sub, g), ui });
 missions.blocked = () => !!street.active;
 const TYPE_NAME = { delivery: 'Delivery', race: 'Checkpoint race', clean: 'Clean driving', drift: 'Drift', escape: 'Police escape' };
 missions.onStart = (job, rules) => { if (job.biz) return; ui.clear(); ui.title(job.name, `${TYPE_NAME[job.type] || 'Contract'} · $${job.cash.toLocaleString('en-US')}`); ui.objective(rules); };
@@ -2104,13 +2595,15 @@ function frame(now) {
     if (upT >= 4 && quality < 2 && !qualityPinned) { upT = 0; setQuality(quality + 1, true); }
   }
   const paused = !started || !el('garage').hidden || missions.paused || empire.open || street.shopOpen || street.briefOpen || selectingCar || document.hidden;
+  updateAbility(real, paused);
   const dt = paused ? 0 : real * timeScale;
+  post.fx.focus = ability.fx; post.fx.blur = crime?.onFoot || camModes[camMode] === 'Orbit' ? 0 : clamp((Math.hypot(car.vx || 0, car.vz || 0) - 30) / 45, 0, 1) * 0.55;
   const inp = !paused && !downing ? readInput(dt) : { gas: 0, brake: 0, steer: 0, hb: 0 };
   acc += dt;
   let steps = 0;
   while (acc >= STEP && steps < 30) { if (!crime?.onFoot) stepCar(STEP, inp); traffic.step(STEP); acc -= STEP; steps++; }
   if (steps === 30) acc = 0;
-  city.update(dt); traffic.update(dt); grass.update(dt);
+  city.update(dt, car.x, car.z); traffic.update(dt); grass.update(dt);
   if (started) {
     police.update(dt);
     if (crime && crime.onFoot) crime.updateFixed(dt, downing ? {} : keys);
@@ -2119,7 +2612,8 @@ function frame(now) {
   missions.update(dt); if (started && !document.hidden) empire.update(real, dt); if (started) street.update(dt);
   updateLoose(dt); updateSmoke(dt); updateDebris(dt); updateSparks(dt); syncCar(dt);
   if (crime && crime.onFoot) crime.updateCamera(dt); else updateCamera(dt);
-  snow.update(real);
+  updateSwitch(real);
+  snow.update(real); weather.update(dt, real);
   updateAudio(); updateHud(); gps.update(real); if (!paused) ui.update(real);
   radio.update(started && !crime.onFoot && !downing && carGroup.visible, paused ? 1 : police.state.level > 0 ? 0.45 : 0);
   if (++cullTick % 6 === 0) city.cull(camera.position);
@@ -2131,7 +2625,7 @@ updateCamera(0);
 requestAnimationFrame(frame);
 setTimeout(() => buildWorldMap().catch(e => console.warn('World map unavailable:', e)), 1200);
 applyDamage();
-window.apex = { career, missions, gps, radio, WORLD, get empire() { return empire; }, get street() { return street; }, harmState: () => harm, get crime() { return crime; }, exitCar, makeCarMesh, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
+window.apex = { get felled() { return felledCount; }, career, missions, gps, radio, WORLD, city, sunDir, phone, togglePhone, phoneRender, who, CHARS, switchChar, weather, wheel, openWheel, wheelMove, ability, toggleAbility, get timeScale() { return timeScale; }, get empire() { return empire; }, get street() { return street; }, harmState: () => harm, get crime() { return crime; }, exitCar, makeCarMesh, ensureModel, carModels: CARMODELS, grass, SKY, sun, setQuality, post, police, nearSolids, renderer, scene, camera, syncCar, updateCamera, car, stepCar, resetCar, soft: () => soft, crash, harm, repairCar, applyDamage, traffic, city, PRESETS, chooseCar, respawn, // console access for tuning
   addSolid, view(mode, angle, radius = 11) { camMode = camModes.indexOf(mode); camSnap = true; orbitR = radius; if (angle !== undefined) { orbitA = angle; orbitHold = true; } } };
 el('loading').hidden = true;
 }

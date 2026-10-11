@@ -76,7 +76,13 @@ function createCareer(catalog, storage) {
       state.owned=[...new Set([...starter,...(Array.isArray(raw.owned)?raw.owned:[]).filter(id=>catalog.some(c=>c.id===id))])];
       state.selected=state.owned.includes(raw.selected)?raw.selected:'sedan';
       if(raw.empire && typeof raw.empire==='object')state.empire=raw.empire;
-      if(raw.story && typeof raw.story==='object')state.story={done:Math.min(8,integer(raw.story.done))};
+      if(raw.story && typeof raw.story==='object'){
+        const st=raw.story;state.story={done:Math.min(8,integer(st.done)),medals:{},events:integer(st.events)};
+        if(st.chars && typeof st.chars==='object')state.story.chars={cur:Math.min(2,integer(st.chars.cur)),poses:[0,1,2].map(i=>{const p=Array.isArray(st.chars.poses)?st.chars.poses[i]:null;return Array.isArray(p)&&p.length>=2&&p.every(Number.isFinite)?p.slice(0,3):null;})};
+        if(Array.isArray(st.packs))state.story.packs=[...new Set(st.packs.filter(n=>Number.isInteger(n)&&n>=0&&n<64))].slice(0,64);
+        if(st.medals && typeof st.medals==='object')for(const [k,v] of Object.entries(st.medals))if(k.length<40&&['bronze','silver','gold'].includes(v))state.story.medals[k]=v;
+        if(st.heist && typeof st.heist==='object'){const h=st.heist;state.story.heist={phase:Math.min(3,integer(h.phase)),approach:h.approach==='smart'?'smart':'loud',crew:[0,1,2].map(i=>Math.min(2,integer(Array.isArray(h.crew)?h.crew[i]:1,1))),setups:Math.min(2,integer(h.setups)),done:integer(h.done)};}
+      }
       if(raw.records && typeof raw.records==='object') for(const [id,r] of Object.entries(raw.records)) {
         if(!/^contract-\d+$/.test(id)||!r||typeof r!=='object')continue;
         state.records[id]={count:integer(r.count),best:Number.isFinite(r.best)&&r.best>0?r.best:0,medal:['bronze','silver','gold'].includes(r.medal)?r.medal:'bronze'};
